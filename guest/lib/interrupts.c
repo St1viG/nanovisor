@@ -1,22 +1,49 @@
 #include "descriptors.h"
 #include "interrupts.h"
+#include "irqproto.h"
 #include "io.h"
 
 static struct idt_entry idt[IDT_ENTRIES];
 
 /*
-	SSE instrukcije su zabranjene unutar __attribute__((interrupt)) handlera; sprečava ih
-	-mgeneral-regs-only, koji se sada primenjuje na ceo guest (vidi guest/Makefile).
+	Declared weak and left undefined here: an image that does not implement the
+	phase C protocol leaves these resolving to NULL, and the handler keeps its
+	phase A behaviour. No per-image opt-in flag is needed.
+*/
+extern void guest_writer_round(void) __attribute__((weak));
+extern void guest_reader_round(void) __attribute__((weak));
+
+/*
+	SSE instrukcije su zabranjene unutar __attribute__((interrupt)) handlera;
+	sprečava ih -mgeneral-regs-only, koji se sada primenjuje na ceo guest
+	(vidi guest/Makefile).
 */
 static void __attribute__((interrupt))
-irq0_handler(struct interrupt_frame *frame)
+irq32_handler(struct interrupt_frame *frame)
 {
-	const char *s;
-
 	(void)frame;
 
-	for (s = "IRQ0 received!\n"; *s; ++s)
-		outb(0xE9, *s);
+	if (!guest_writer_round && !guest_reader_round) {
+		const char *s;
+
+		for (s = "IRQ0 received!\n"; *s; ++s)
+			outb(0xE9, *s);
+		return;
+	}
+
+	/* Spec: the first interrupt assigns the operating mode, which is saved. */
+	if (guest_mode < 0) {
+		guest_mode = inb(PORT_BUF);
+		return;
+	}
+
+	if (guest_mode == HV_MODE_WRITE) {
+		if (guest_writer_round)
+			guest_writer_round();
+	} else {
+		if (guest_reader_round)
+			guest_reader_round();
+	}
 }
 
 static void set_idt_gate(unsigned n, void (*handler)(struct interrupt_frame *))
@@ -35,7 +62,7 @@ void init_idt(void)
 {
 	struct dt_ptr p;
 
-	set_idt_gate(32, irq0_handler);
+	set_idt_gate(32, irq32_handler);
 
 	p.limit = sizeof(idt) - 1;
 	p.base  = (uint64_t)(uintptr_t)idt;
