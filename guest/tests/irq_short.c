@@ -2,8 +2,11 @@
 #include "print.h"
 #include "irqproto.h"
 
-/* Throwaway: a reader that stores only 4 bytes of each round, so it reports
-   fewer than the round carried and must be stopped by the hypervisor. */
+/*
+	A reader that stores only 4 bytes of each round, so it reports fewer than
+	the round carried and must be stopped by the hypervisor (spec part C). Kept
+	as permanent coverage of that rule.
+*/
 void guest_reader_round(void)
 {
 	char small[4];

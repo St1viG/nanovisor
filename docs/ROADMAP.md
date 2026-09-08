@@ -404,7 +404,7 @@ Covers `PROJECT_en.md` lines 62–128.
 
 ### Verification — 3 demos
 
-Scripted end to end in `scripts/test_phase_b.sh` (15 checks). **Passing.**
+Scripted end to end in `scripts/test_phase_b.sh` (24 checks). **Passing.**
 
 1. **Round trip.** `file_basic.c`: `open("out.txt", O_RDWR|O_CREATE)` → `write` → `lseek(fd, 0, SEEK_SET)`
    → `read` back → echo to `0xE9` → `close`. Confirm host-side with `cat vm_0/out.txt`.
@@ -468,7 +468,7 @@ Covers `PROJECT_en.md` lines 140–160.
 
 ### Verification — 3 demos
 
-Scripted end to end in `scripts/test_phase_c.sh` (16 checks). **Passing.**
+Scripted end to end in `scripts/test_phase_c.sh` (20 checks). **Passing.**
 
 1. **Mode assignment.** Three `irq_probe.img` guests that only print their assigned mode → exactly one
    `1`, two `0`s.
@@ -529,7 +529,7 @@ Ordered by expected time burn.
 | 7 | **Guest stack/`.bss` outside the mapped region.** Only 68 KB of GVA is mapped today; a `BUFFER_SIZE` buffer walks off the end. | Immediate triple fault on first touch. | A.3 identity-maps all of `[0, mem_size)`. Assert in `load_guest_image` that image size + slack < `mem_size - 0x8000`. |
 | 8 | **`getopt_long` permutation vs variadic lists** (`-g a b -f c d`). | The second image silently vanishes, or `-f` absorbs `-g`'s operands. | Consume `argv[optind]` inside the `case` handler before returning to `getopt_long`. If fragile, hand-roll a 60-line parser — this is a coursework CLI, not a product. |
 | 9 | **`.rodata.str1.1` orphaned at `-O2`.** `guest.ld` matches `.rodata`, not `.rodata*`. | String literals land at a surprising address (possibly after `.bss`); guest prints garbage. | Tasks 0.2 and 0.3 **together**. Verify by linking to ELF first and inspecting with `readelf -S`, then `objcopy -O binary`. |
-| 10 | **`run->io` mis-decoding.** `data_offset` is a byte offset into the `kvm_run` page; `size` is operand width; `count` is the string-op repeat count. | Reading 1 byte where 4 were written; losing bytes when `count > 1`. | Helpers `io_read_u32`/`io_write_u32`/`io_read_u8`/`io_write_u8`, each asserting `io.size` and `io.count`. Assert loudly rather than mis-decode silently. |
+| 10 | **`run->io` mis-decoding.** `data_offset` is a byte offset into the `kvm_run` page; `size` is operand width; `count` is the string-op repeat count. | Reading 1 byte where 4 were written; losing bytes when `count > 1`. | Helpers `io_u8`/`io_u32` in `host/src/vm.c` return the slot; every handler asserts `io.size` and `io.count` before using them. Assert loudly rather than mis-decode silently. |
 | 11 | **Interleaved `printf` from N threads.** | Guest output shuffled mid-line; demos look broken when they are correct. | Task A.9: per-VM line buffer, one mutex, `[vmN]` prefix. |
 | 12 | **`-m 2 -p 2` boundary.** Exactly one 2 MB PD entry; `rsp = 0x200000` is one past the top. | First `push` faults — or appears to. | The first push writes to `rsp - 8 = 0x1FFFF8`, which *is* mapped. Correct, but assert it and include this combination in the six-way paging matrix. |
 

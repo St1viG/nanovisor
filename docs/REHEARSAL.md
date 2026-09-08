@@ -20,6 +20,13 @@ the part worth practising.
 | 7 | `rep outsb` instead of byte-at-a-time | 2 | ~25 | steps only |
 | 8 | Swap the identity map for `KVM_TRANSLATE` | 1 | ~20 | steps only |
 
+Constants both sides must agree on, the ports, the IRQ vector, `BUFFER_SIZE` and
+the request layout, live in `common/hv_abi.h`, so one edit reaches both. The load
+address `0x8000` is the one value still kept in two places (`host/inc/vm.h` and
+`guest/guest.ld`); see modification 1. Port handlers on the host read and write
+the operand through `io_u8(v)`/`io_u32(v)` in `host/src/vm.c`, and the guest has
+`cli()`/`sti()`/`hlt()` in `guest/inc/io.h` next to the port I/O.
+
 ---
 
 ## 1. Add `16` to the allowed memory sizes
@@ -152,6 +159,7 @@ Expect to be asked what happens if the third role dies mid-round.
 Not executed. Today every handler asserts `io.count == 1`. With a string
 instruction the guest issues one `rep outsb` and KVM reports `io.count > 1` with
 `count` items of `io.size` bytes laid out consecutively from `io.data_offset`.
+`io_u8(v)` points at the first item, so the host loop is over `io_u8(v)[i]`.
 
 1. `guest/lib/irqproto.c` — replace the byte loop with `rep outsb`/`rep insb`.
 2. `host/src/vm.c` — in `handle_buf_port`, loop over `io.count` reading

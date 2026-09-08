@@ -4,7 +4,11 @@
 #include "io.h"
 #include "hv_abi.h"
 
-/* Throwaway: feeds the hypervisor values a correct guest would never send. */
+/*
+	Hostile guest, kept as permanent coverage of the request validation: every
+	value below is one a correct guest would never send. Each must be refused
+	with -1 and the VM must keep running; the final "survived" line is the proof.
+*/
 
 static int raw_call(uint32_t addr)
 {

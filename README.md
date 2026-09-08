@@ -229,11 +229,12 @@ in-kernel irqchip would make `KVM_INTERRUPT` fail.
 make test                    # everything
 ./scripts/regress.sh         # phase 0: byte-identical to the original starter
 ./scripts/test_phase_a.sh    # 19 checks
-./scripts/test_phase_b.sh    # 15 checks
-./scripts/test_phase_c.sh    # 16 checks
+./scripts/test_phase_b.sh    # 24 checks
+./scripts/test_phase_c.sh    # 20 checks
 ./scripts/demo_a.sh          # the defense demos, narrated
 ```
 
 The phase 0 gate diffs against `tests/expected/phase0.txt` and fails on any
 compiler warning. The phase C suite is the one worth running repeatedly — it is
-what caught the deadlock above.
+what caught the deadlock above. The phase C suite and `demo_c.sh` generate their
+input files with `python3`.
