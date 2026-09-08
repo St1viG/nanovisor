@@ -11,10 +11,20 @@
 #define WATCHDOG_SECONDS 5
 
 static struct shared_buf buf;
+static int verbose_rounds;
 
-void shared_buf_init(int readers_total)
+/* Called with buf.m held. */
+static void trace(struct vm *v, const char *what)
+{
+	if (verbose_rounds)
+		out_printf(v->id, "trace: %s (round=%llu len=%u readers_pending=%d)\n",
+			   what, (unsigned long long)buf.round, buf.len, buf.readers_pending);
+}
+
+void shared_buf_init(int readers_total, int verbose)
 {
 	memset(&buf, 0, sizeof(buf));
+	verbose_rounds = verbose;
 	pthread_mutex_init(&buf.m, NULL);
 	pthread_cond_init(&buf.cv, NULL);
 	buf.readers_total = readers_total;
@@ -142,6 +152,7 @@ int32_t sb_writer_publish(struct vm *v)
 
 	buf.round++;
 	buf.readers_pending = buf.readers_total;
+	trace(v, "writer published");
 
 	v->stream = STREAM_EXPECT_COUNT;
 	v->stream_index = 0;
@@ -167,6 +178,7 @@ uint32_t sb_reader_count(struct vm *v)
 	v->stream_index = 0;
 	v->stream_expected = buf.len;
 	len = buf.len;
+	trace(v, "reader took round");
 
 	pthread_mutex_unlock(&buf.m);
 
@@ -206,6 +218,7 @@ int sb_reader_ack(struct vm *v, uint32_t n_read)
 			buf.readers_pending--;
 	}
 
+	trace(v, "reader acked");
 	pthread_cond_broadcast(&buf.cv);
 	pthread_mutex_unlock(&buf.m);
 
@@ -228,7 +241,21 @@ void sb_vm_gone(struct vm *v)
 		as "I am finished with this round".
 	*/
 	if (v->role == ROLE_READER) {
-		if (v->round_pending && buf.readers_pending > 0)
+		/*
+			A departing reader still owes an acknowledgement for the current
+			round in two distinct cases: it took the round and died before
+			acking (round_pending), or it was counted in readers_pending when
+			the round was published and died before ever taking it
+			(last_round < round). Only a reader that has already acked the
+			current round owes nothing.
+
+			Missing the second case deadlocks the writer whenever a reader dies
+			between a publish and its own first read - which is a race, so it
+			reproduced roughly one run in six.
+		*/
+		int owes_ack = v->round_pending || v->last_round < buf.round;
+
+		if (owes_ack && buf.readers_pending > 0)
 			buf.readers_pending--;
 		if (buf.readers_total > 0)
 			buf.readers_total--;

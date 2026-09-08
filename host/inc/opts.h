@@ -23,6 +23,7 @@ struct hv_options {
 	int    n_files;
 	int    irq_session;   /* -i: run the phase C shared-buffer session */
 	int    writer_id;     /* -w: which VM writes; the rest read */
+	int    verbose;       /* -v: trace shared-buffer rounds */
 };
 
 int  parse_options(int argc, char **argv, struct hv_options *o);

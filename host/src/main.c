@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 		if (opts.n_guests < 2)
 			fprintf(stderr, "warning: --irq with %d guest(s): no reader to receive rounds\n",
 				opts.n_guests);
-		shared_buf_init(opts.n_guests - 1);
+		shared_buf_init(opts.n_guests - 1, opts.verbose);
 	}
 
 	vms  = calloc((size_t)opts.n_guests, sizeof(*vms));

@@ -33,7 +33,7 @@ struct shared_buf {
 	int over;                  /* session finished; every VM may terminate */
 };
 
-void shared_buf_init(int readers_total);
+void shared_buf_init(int readers_total, int verbose);
 void shared_buf_destroy(void);
 
 /*

@@ -20,6 +20,7 @@ void usage(const char *prog)
 		"  -f, --file   <f> [f...]     files shared between VMs\n"
 		"  -i, --irq                   run the shared-buffer interrupt session\n"
 		"  -w, --writer <id>           VM that writes to the shared buffer (default 0)\n"
+		"  -v, --verbose               trace shared-buffer rounds\n"
 		"  -h, --help                  this message\n",
 		prog, DEFAULT_MEM_MB, DEFAULT_PAGE_KB);
 }
@@ -106,6 +107,7 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 		{ "file",   required_argument, NULL, 'f' },
 		{ "irq",    no_argument,       NULL, 'i' },
 		{ "writer", required_argument, NULL, 'w' },
+		{ "verbose", no_argument,      NULL, 'v' },
 		{ "help",   no_argument,       NULL, 'h' },
 		{ NULL,     0,                 NULL, 0   },
 	};
@@ -117,7 +119,7 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 
 	/* The leading '+' disables GNU permutation: operands are ours to consume
 	   in collect_list, so getopt_long must never reorder them. */
-	while ((c = getopt_long(argc, argv, "+m:p:g:f:iw:h", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "+m:p:g:f:iw:vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'm':
 			if (parse_memory(optarg, &o->mem_mb) < 0)
@@ -137,6 +139,9 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 			break;
 		case 'i':
 			o->irq_session = 1;
+			break;
+		case 'v':
+			o->verbose = 1;
 			break;
 		case 'w': {
 			char *end;
