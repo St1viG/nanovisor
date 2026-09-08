@@ -1,0 +1,17 @@
+# Scratch dir for storing temp files
+scratch/
+
+# Build output
+build/
+*.o
+*.d
+*.elf
+*.img
+
+# Per-VM local file directories (created at runtime, phase B)
+vm_*/
+
+# Generated test data
+*.txt.orig
+shared.txt
+input.txt
