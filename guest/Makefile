@@ -13,7 +13,7 @@ CFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone \
          -fno-stack-protector -mgeneral-regs-only \
          -fno-asynchronous-unwind-tables -fcf-protection=none \
          -fno-builtin -fno-tree-loop-distribute-patterns \
-         -O2 -Wall -Wextra -Iinc
+         -O2 -Wall -Wextra -Iinc -I../common
 
 # lib/ is linked into every image; each tests/<name>.c becomes build/<name>.img.
 LIB_SRCS  = $(wildcard lib/*.c)
