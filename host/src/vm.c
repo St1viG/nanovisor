@@ -8,9 +8,10 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
-int vm_init(struct vm *v, size_t mem_size)
+int vm_init(struct vm *v, const struct vm_config *cfg)
 {
 	struct kvm_userspace_memory_region region;
+	size_t mem_size = cfg->mem_size;
 
 	memset(v, 0, sizeof(*v));
 	v->kvm_fd = v->vm_fd = v->vcpu_fd = -1;
@@ -18,6 +19,9 @@ int vm_init(struct vm *v, size_t mem_size)
 	v->run = MAP_FAILED;
 	v->run_mmap_size = 0;
 	v->mem_size = mem_size;
+	v->cfg = *cfg;
+	v->id = cfg->id;
+	v->irq_pending = 0;
 
 	v->kvm_fd = open("/dev/kvm", O_RDWR);
 	if (v->kvm_fd < 0) {
@@ -154,6 +158,93 @@ void setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
 	sregs->efer = EFER_LME | EFER_LMA;
 
 	setup_segments_64(sregs);
+}
+
+int vm_setup(struct vm *v, const struct vm_config *cfg)
+{
+	struct kvm_sregs sregs;
+	struct kvm_regs regs;
+
+	if (ioctl(v->vcpu_fd, KVM_GET_SREGS, &sregs) < 0) {
+		perror("KVM_GET_SREGS");
+		return -1;
+	}
+
+	setup_long_mode(v, &sregs);
+
+	if (ioctl(v->vcpu_fd, KVM_SET_SREGS, &sregs) < 0) {
+		perror("KVM_SET_SREGS");
+		return -1;
+	}
+
+	if (load_guest_image(v, cfg->image, GUEST_START_ADDR) < 0) {
+		printf("Failed to load guest image\n");
+		return -1;
+	}
+
+	memset(&regs, 0, sizeof(regs));
+	regs.rflags = 0x2;
+	regs.rip    = 0;          /* GVA 0 maps to GPA GUEST_START_ADDR until task A.4 */
+	regs.rsp    = 2 << 20;    /* == MEM_SIZE; becomes cfg->mem_size in A.4 */
+
+	if (ioctl(v->vcpu_fd, KVM_SET_REGS, &regs) < 0) {
+		perror("KVM_SET_REGS");
+		return -1;
+	}
+
+	v->irq_pending = IRQ_COUNT;
+
+	return 0;
+}
+
+/*
+	The vCPU dispatch loop. Returns 0 once the guest halts, -1 if the VM could
+	not be run. Phase A.7 calls this from one thread per guest, so it must not
+	touch any state outside *v.
+*/
+int vm_run(struct vm *v)
+{
+	int stop = 0;
+
+	v->run->request_interrupt_window = (v->irq_pending > 0);
+
+	while (stop == 0) {
+		if (ioctl(v->vcpu_fd, KVM_RUN, 0) == -1) {
+			printf("KVM_RUN failed\n");
+			return -1;
+		}
+
+		switch (v->run->exit_reason) {
+		case KVM_EXIT_IO:
+			if (v->run->io.direction == KVM_EXIT_IO_OUT && v->run->io.port == 0xE9) {
+				char *p = (char *)v->run;
+				printf("%c", *(p + v->run->io.data_offset));
+			}
+			continue;
+		case KVM_EXIT_IRQ_WINDOW_OPEN:
+			if (v->irq_pending > 0) {
+				if (inject_irq(v, IRQ_NUM) < 0)
+					return -1;
+				v->irq_pending--;
+			} else {
+				v->run->request_interrupt_window = 0;
+			}
+			continue;
+		case KVM_EXIT_HLT:
+			printf("KVM_EXIT_HLT\n");
+			stop = 1;
+			break;
+		case KVM_EXIT_SHUTDOWN:
+			printf("Shutdown\n");
+			stop = 1;
+			break;
+		default:
+			printf("Default - exit reason: %d\n", v->run->exit_reason);
+			break;
+		}
+	}
+
+	return 0;
 }
 
 int load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr)
