@@ -4,7 +4,7 @@ BUILD_DIR ?= build
 
 # -pthread belongs in CFLAGS as well as the link line: it defines _REENTRANT
 # and selects the right libc paths. -lpthread at link time alone does not.
-CFLAGS  = -Wall -Wextra -g -O2 -D_GNU_SOURCE -pthread -Iinc
+CFLAGS  = -Wall -Wextra -g -O2 -D_GNU_SOURCE -pthread -Iinc -I../common
 LDFLAGS = -pthread
 
 SRCS = $(wildcard src/*.c)

@@ -92,4 +92,18 @@ int  inject_irq(struct vm *v, unsigned int vector);
 
 const char *kvm_exit_name(uint32_t reason);
 
+/*
+	Translate a guest address into a host pointer.
+
+	Design D1 identity-maps [0, mem_size), so GVA == GPA and the translation is
+	just v->mem + gva - but the bounds check is the whole point: the guest
+	chooses these values, so a hostile or simply broken guest must not be able
+	to steer the hypervisor outside its own memory region.
+
+	Returns NULL if the range is not entirely inside guest memory, overflow
+	included. guest_str additionally requires a NUL within the bound.
+*/
+void       *guest_ptr(struct vm *v, uint64_t gva, size_t len);
+const char *guest_str(struct vm *v, uint64_t gva, size_t max_len);
+
 #endif /* VM_H */

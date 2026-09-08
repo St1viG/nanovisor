@@ -443,6 +443,40 @@ int load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr)
 	return 0;
 }
 
+void *guest_ptr(struct vm *v, uint64_t gva, size_t len)
+{
+	/* Written to survive any gva/len the guest can produce, overflow included. */
+	if (len > v->mem_size)
+		return NULL;
+
+	if (gva > v->mem_size - len)
+		return NULL;
+
+	return v->mem + gva;
+}
+
+const char *guest_str(struct vm *v, uint64_t gva, size_t max_len)
+{
+	const char *p;
+	size_t avail, i;
+
+	if (gva >= v->mem_size)
+		return NULL;
+
+	p = v->mem + gva;
+	avail = v->mem_size - gva;
+	if (avail > max_len)
+		avail = max_len;
+
+	for (i = 0; i < avail; i++) {
+		if (p[i] == '\0')
+			return p;
+	}
+
+	/* Unterminated within the bound: refuse rather than read past it. */
+	return NULL;
+}
+
 int inject_irq(struct vm *v, unsigned int vector)
 {
 	struct kvm_interrupt irq = { .irq = vector };
