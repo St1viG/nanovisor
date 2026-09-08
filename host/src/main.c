@@ -1,8 +1,12 @@
 #include "opts.h"
+#include "fileio.h"
 #include "vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 
 /*
@@ -56,6 +60,27 @@ int main(int argc, char *argv[])
 		free_options(&opts);
 		return rc > 0 ? 0 : 1;   /* --help is not an error */
 	}
+
+	/*
+		Shared files are resolved by basename, so a guest opens "a.txt"
+		regardless of the path -f was given. Check them once here: a name the
+		spec's rules reject, or a file that is not readable, can never be
+		opened by any guest, and saying so now beats debugging a -1 later.
+	*/
+	for (i = 0; i < opts.n_files; i++) {
+		const char *base = strrchr(opts.files[i], '/');
+
+		base = base ? base + 1 : opts.files[i];
+
+		if (!is_valid_name(base))
+			fprintf(stderr, "warning: shared file '%s' has a name no guest can open\n",
+				opts.files[i]);
+		else if (access(opts.files[i], R_OK) != 0)
+			fprintf(stderr, "warning: shared file '%s' is not readable: %s\n",
+				opts.files[i], strerror(errno));
+	}
+
+	fileio_set_shared(opts.files, opts.n_files);
 
 	vms  = calloc((size_t)opts.n_guests, sizeof(*vms));
 	args = calloc((size_t)opts.n_guests, sizeof(*args));
