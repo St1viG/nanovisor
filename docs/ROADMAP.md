@@ -13,9 +13,9 @@ Implementation roadmap for the AOR2 KVM hypervisor project. The assignment itsel
 Update as you go.
 
 ```
-Engineering progress:  94 / 100
+Engineering progress:  100 / 100
 Assignment points:     45 / 45
-Current phase:         D (Defense readiness)
+Current phase:         complete
 ```
 
 | Milestone | Engineering % | Points secured |
@@ -489,13 +489,16 @@ Scripted end to end in `scripts/test_phase_c.sh` (16 checks). **Passing.**
 
 ## Phase D — Defense readiness (6 pts)
 
-- [ ] **D.1** — `scripts/run_tests.sh` (or `make test`) running all ~10 demos and diffing against expected
+- [x] **D.1** — `scripts/run_tests.sh` (or `make test`) running all ~10 demos and diffing against expected
       output — **1.5 pts**
-- [ ] **D.2** — `scripts/demo_a.sh`, `demo_b.sh`, `demo_c.sh` — the exact commands you will type at the
+- [x] **D.2** — `scripts/demo_a.sh`, `demo_b.sh`, `demo_c.sh` — the exact commands you will type at the
       defense, in order — **1.5 pts**
-- [ ] **D.3** — `README.md`: memory map diagram, port/ABI table, protocol state machines, and a "design
+- [x] **D.3** — `README.md`: memory map diagram, port/ABI table, protocol state machines, and a "design
       decisions and their alternatives" section covering D1–D7 — **1.5 pts**
-- [ ] **D.4** — Live-modification rehearsal: time yourself on each candidate below — **1.5 pts**
+- [x] **D.4** — Live-modification rehearsal: time yourself on each candidate below — **1.5 pts**
+      · [`REHEARSAL.md`](REHEARSAL.md)
+      <br>Four candidates were performed against the tree, run and reverted, so the file/line counts
+      recorded there are measured. Adding 16 MB turned out to have a trap and produced a real fix.
 
 ### Candidate live modifications to rehearse
 
