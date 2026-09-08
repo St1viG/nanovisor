@@ -37,8 +37,8 @@ else
 	echo "     no warnings"
 fi
 
-echo "==> running $BIN $IMG"
-actual="$(timeout 10 "$BIN" "$IMG" 2>&1)"
+echo "==> running $BIN -g $IMG"
+actual="$(timeout 10 "$BIN" -g "$IMG" 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
 	echo "FAIL: hypervisor exited with status $rc"
