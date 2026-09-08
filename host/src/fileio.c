@@ -218,13 +218,19 @@ static int32_t hv_open(struct vm *v, uint32_t path_gva, int32_t flags)
 		snprintf(path, sizeof(path), "vm_%d/%s", v->id, name);
 	}
 
-	hostfd = open(path, posix_flags, 0644);
-	if (hostfd < 0)
+	/*
+		Claim the table slot before touching the filesystem. Opening first meant
+		that when the table was full, an O_CREATE open had already created the
+		file on disk and then returned -1 to the guest - a side effect from a
+		call the guest was told had failed.
+	*/
+	f = alloc_fd(v, &fd);
+	if (!f)
 		return -1;
 
-	f = alloc_fd(v, &fd);
-	if (!f) {
-		close(hostfd);
+	hostfd = open(path, posix_flags, 0644);
+	if (hostfd < 0) {
+		free_fd(f);
 		return -1;
 	}
 

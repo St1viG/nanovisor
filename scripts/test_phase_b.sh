@@ -92,7 +92,21 @@ run -m 4 -p 2 -g $IMG/cow_twice.img -f shared.txt >/dev/null
 cmp -s shared.txt shared.txt.orig && ok "original still untouched" || bad "original modified"
 
 echo
-echo "6. hostile guest input"
+echo "6. descriptor table limits"
+rm -rf vm_0
+out="$(run -m 4 -p 2 -g $IMG/fd_limit.img)"
+grep -q 'opened 16, refused 8' <<<"$out" \
+	&& ok "table full is refused cleanly" || bad "fd limit not enforced" "$out"
+grep -q 'write to the first fd still works: 2' <<<"$out" \
+	&& ok "earlier descriptors keep working" || bad "earlier fd broken"
+grep -q 'after closing, a new open succeeds: 0' <<<"$out" \
+	&& ok "slots are reused after close" || bad "slot not reused"
+# A refused open must not have created its file first.
+[ "$(ls vm_0 | wc -l)" = 17 ] \
+	&& ok "refused opens created no files" || bad "refused opens left $(ls vm_0 | wc -l) files"
+
+echo
+echo "7. hostile guest input"
 rm -rf vm_0
 out="$(run -m 4 -p 2 -g $IMG/hostile.img)"
 grep -q 'survived' <<<"$out" \

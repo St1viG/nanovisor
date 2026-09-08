@@ -175,6 +175,9 @@ int main(int argc, char *argv[])
 	if (opts.irq_session)
 		shared_buf_destroy();
 
+	/* The registry borrows opts.files, which is about to be freed. */
+	fileio_set_shared(NULL, 0);
+
 	free(vms);
 	free(args);
 	free(tids);
