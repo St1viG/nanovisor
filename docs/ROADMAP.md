@@ -13,9 +13,9 @@ Implementation roadmap for the AOR2 KVM hypervisor project. The assignment itsel
 Update as you go.
 
 ```
-Engineering progress:  67 / 100
-Assignment points:     30 / 45
-Current phase:         C (Interrupt support)
+Engineering progress:  94 / 100
+Assignment points:     45 / 45
+Current phase:         D (Defense readiness)
 ```
 
 | Milestone | Engineering % | Points secured |
@@ -428,37 +428,47 @@ Covers `PROJECT_en.md` lines 140–160.
 
 ### Tasks
 
-- [ ] **C.1** — `#define BUFFER_SIZE` + `struct shared_buf { pthread_mutex_t m; pthread_cond_t cv;
+- [x] **C.1** — `#define BUFFER_SIZE` + `struct shared_buf { pthread_mutex_t m; pthread_cond_t cv;
       uint8_t data[BUFFER_SIZE]; uint32_t len; uint64_t round; int readers_total, readers_pending; int eof; }`
       plus init/destroy — **2 pts** · `host/inc/shared_buf.h`, `host/src/shared_buf.c` (new)
-- [ ] **C.2** — Role assignment: writer = VM 0 (or an explicit option), readers = the rest; first IRQ 32
+- [x] **C.2** — Role assignment: writer = VM 0 (or an explicit option), readers = the rest; first IRQ 32
       injected at session start; `vm->role`, `vm->irq_session_active` — **2 pts**
       · `host/src/main.c`, `host/inc/vm.h`
-- [ ] **C.3** — Guest ISR rewrite: `static volatile int mode = -1;` — first entry reads the mode via
+      <br>**The session is opt-in via `-i`/`--irq`,** with `-w`/`--writer <id>` choosing the writer.
+      Without `-i` the hypervisor keeps its phase A behaviour, so every phase 0/A/B demo still runs
+      unchanged. `-v`/`--verbose` traces publish/take/ack, which is what makes the barrier demonstrable.
+- [x] **C.3** — Guest ISR rewrite: `static volatile int mode = -1;` — first entry reads the mode via
       `inb(0x510)` and returns; subsequent entries dispatch to the reader or writer path — **3 pts**
-      · `guest/src/interrupts.c`
-- [ ] **C.4** — Guest writer path: `outl(0x510, count)`, then `count` × `outb(0x510, byte)`, then
+      · `guest/lib/interrupts.c`
+      <br>An image opts in by *defining* `guest_writer_round`/`guest_reader_round`; the handler declares
+      them weak and undefined, so images that define neither keep the phase A behaviour. No per-image
+      flag, and `hello.img` is untouched.
+- [x] **C.4** — Guest writer path: `outl(0x510, count)`, then `count` × `outb(0x510, byte)`, then
       `accepted = inl(0x520)` — **2 pts** · `guest/lib/irqproto.c` (new)
-- [ ] **C.5** — Guest reader path: `count = inl(0x510)`, then `count` × `inb(0x510)`, then
+- [x] **C.5** — Guest reader path: `count = inl(0x510)`, then `count` × `inb(0x510)`, then
       `outl(0x520, n_read)`; halt the VM if `n_read != count`, per spec — **2 pts** · `guest/lib/irqproto.c`
-- [ ] **C.6** — Host `0x510` per-VM state machine `{ EXPECT_COUNT, STREAMING }` + index; direction
+- [x] **C.6** — Host `0x510` per-VM state machine `{ EXPECT_COUNT, STREAMING }` + index; direction
       validated against `vm->role`; bytes past `BUFFER_SIZE` accepted from the guest and discarded (spec:
       "the hypervisor ignores the excess") — **3 pts** · `host/src/shared_buf.c`, `host/src/vm.c`
-- [ ] **C.7** — Host `0x520`: the writer's IN returns the accepted count; a reader's OUT records bytes
+- [x] **C.7** — Host `0x520`: the writer's IN returns the accepted count; a reader's OUT records bytes
       read and terminates that VM if `< len` — **2 pts** · `host/src/shared_buf.c`
-- [ ] **C.8** — Barrier: the writer blocks until `readers_pending == 0`; each reader decrements and
+- [x] **C.8** — Barrier: the writer blocks until `readers_pending == 0`; each reader decrements and
       broadcasts; a monotonic `round` counter prevents a fast reader from consuming the next round's
       wakeup — **3 pts** · `host/src/shared_buf.c`
-- [ ] **C.9** — Injection coordinator per D5, with a `pthread_cond_timedwait` watchdog (5 s) that dumps
+- [x] **C.9** — Injection coordinator per D5, with a `pthread_cond_timedwait` watchdog (5 s) that dumps
       every VM's state on timeout — **3 pts** · `host/src/vm.c`
       <br>The watchdog alone will save hours; a hung VM is otherwise invisible.
-- [ ] **C.10** — Termination: `count == 0` sentinel → zero-length round → readers finish →
+- [x] **C.10** — Termination: `count == 0` sentinel → zero-length round → readers finish →
       `irq_session_active = 0` everywhere → next `hlt` terminates. Plus reader-death cleanup: `vm_destroy`
       decrements `readers_total`/`readers_pending` under the mutex and broadcasts, so a crashed reader
       cannot deadlock the writer — **3 pts** · `host/src/shared_buf.c`, `host/src/vm.c`
-- [ ] **C.11** — Test images — **2 pts** · `guest/tests/irq_writer.c`, `irq_reader.c`, `irq_probe.c`
+- [x] **C.11** — Test images — **2 pts** · `guest/tests/irq_writer.c`, `irq_reader.c`, `irq_probe.c`,
+      `irq_flood.c`
+      <br>`irq_flood.c` sends `2 × BUFFER_SIZE` in one round to exercise the discard path.
 
 ### Verification — 3 demos
+
+Scripted end to end in `scripts/test_phase_c.sh` (16 checks). **Passing.**
 
 1. **Mode assignment.** Three `irq_probe.img` guests that only print their assigned mode → exactly one
    `1`, two `0`s.
@@ -509,7 +519,7 @@ Ordered by expected time burn.
 |---|---|---|---|
 | 1 | **Red-zone corruption.** `guest/Makefile` lacks `-mno-red-zone` and an ISR already exists. | Nondeterministic wrong locals; garbage return address → `#GP`/`#PF` → triple fault → `KVM_EXIT_SHUTDOWN` with a nonsensical `rip`. Only manifests when the IRQ lands in a leaf function, so it looks timing-dependent. | Task 0.2, **before any new guest code**. |
 | 2 | **Phase C `hlt` deadlock / injection cadence.** Guest halts awaiting IRQ N+1; hypervisor waits for the guest. | Everything hangs after the first ISR; threads sit in `futex_wait` or blocked in `ioctl`. | D5 + task C.9: the coordinator owns cadence, not the guest. Add the `pthread_cond_timedwait` watchdog. |
-| 3 | **Barrier deadlock when a reader dies mid-round.** | Writer hangs forever; one reader already printed an exit reason. | Task C.10: `vm_destroy` decrements both counters under the mutex and broadcasts. Teardown is an implicit "I finished this round". |
+| 3 | **Barrier deadlock when a reader dies mid-round.** | Writer hangs forever; one reader already printed an exit reason. | Task C.10: `vm_destroy` decrements both counters under the mutex and broadcasts. Teardown is an implicit "I finished this round". **This fired.** The first implementation only credited a reader that had *taken* the round; a reader counted at publish time that died before its first read left `readers_pending` stuck. Condition is now `round_pending \|\| last_round < round`. Reproduced ~1 run in 6; the C.9 watchdog dump identified it immediately. |
 | 4 | **CoW offset loss.** Guest seeks to 500 and writes; the copy resets position to 0 or EOF. | Corrupted output, off-by-N data, silently wrong. | D3: `long off` + `pread`/`pwrite` exclusively. Never consult the host fd cursor. Phase B demo 3 covers it. |
 | 5 | **Identity-map decision deferred.** Phase B written against `GVA = GPA - 0x8000`, then changed. | Every `guest_ptr` call site and the linker script change at once. | Lock D1 in A.3/A.4, before B.1. |
 | 6 | **`KVM_INTERRUPT` vs in-kernel irqchip.** Calling `KVM_CREATE_IRQCHIP` (tempting when reading LAPIC docs) makes `KVM_INTERRUPT` fail. | `perror("KVM_INTERRUPT")` at `host/src/vm.c:202` fires immediately. | Never call `KVM_CREATE_IRQCHIP`/`KVM_CREATE_PIT2`. Comment the dependency at `inject_irq`. Create the vCPU in its own thread (D7). |
