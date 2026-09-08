@@ -37,6 +37,19 @@
 
 #define SERIAL_PORT 0xE9
 
+/* Phase C roles. */
+enum vm_role {
+	ROLE_NONE = 0,
+	ROLE_READER,
+	ROLE_WRITER,
+};
+
+/* Where a VM is in the byte-stream half of the 0x510 protocol. */
+enum stream_state {
+	STREAM_EXPECT_COUNT = 0,
+	STREAM_ACTIVE,
+};
+
 #define IRQ_NUM   32
 #define IRQ_COUNT 3
 
@@ -61,6 +74,8 @@ struct vm_config {
 	int         page_size;   /* KB: PAGE_SIZE_4K or PAGE_SIZE_2M */
 	const char *image;
 	int         id;
+	int         role;        /* enum vm_role; phase C */
+	int         irq_session; /* participate in the shared-buffer session */
 };
 
 struct vm {
@@ -84,6 +99,16 @@ struct vm {
 	   PORT_FILE has to return. */
 	struct guest_file files[MAX_OPEN_FILES];
 	int32_t           last_ret;
+
+	/* Phase C. */
+	enum vm_role      role;
+	int               irq_session_active;
+	int               mode_sent;          /* the first interrupt has been answered */
+	enum stream_state stream;
+	uint32_t          stream_expected;    /* bytes this round is meant to carry */
+	uint32_t          stream_index;       /* how many have crossed so far */
+	uint64_t          last_round;         /* last round this VM consumed */
+	int               round_pending;      /* consumed a round, not yet acknowledged */
 };
 
 int  vm_init(struct vm *v, const struct vm_config *cfg);

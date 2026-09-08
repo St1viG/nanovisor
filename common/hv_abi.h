@@ -27,6 +27,29 @@
 
 #define PORT_FILE 0x0278
 
+/*
+	Phase C: the shared buffer (spec part C).
+
+	  PORT_BUF (0x510)  mode byte on the first interrupt, then the round's
+	                    length (32-bit) followed by the bytes themselves
+	  PORT_ACK (0x520)  a reader reports how many bytes it read; the writer
+	                    reads back how many the hypervisor accepted
+
+	BUFFER_SIZE lives here rather than in a host header because the guest has
+	to size its own staging buffer to match: a reader must be able to consume
+	an entire round, since failing to read every byte stops the VM.
+
+	Deliberately small so that a short input still exercises the multi-round
+	path and the barrier. A large value hides exactly the bugs worth finding.
+*/
+#define PORT_BUF 0x510
+#define PORT_ACK 0x520
+
+#define BUFFER_SIZE 64
+
+#define HV_MODE_READ  0
+#define HV_MODE_WRITE 1
+
 enum hv_op {
 	HV_OPEN  = 1,
 	HV_CLOSE = 2,

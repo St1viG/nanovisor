@@ -1,5 +1,6 @@
 #include "opts.h"
 #include "fileio.h"
+#include "shared_buf.h"
 #include "vm.h"
 
 #include <stdio.h>
@@ -82,6 +83,13 @@ int main(int argc, char *argv[])
 
 	fileio_set_shared(opts.files, opts.n_files);
 
+	if (opts.irq_session) {
+		if (opts.n_guests < 2)
+			fprintf(stderr, "warning: --irq with %d guest(s): no reader to receive rounds\n",
+				opts.n_guests);
+		shared_buf_init(opts.n_guests - 1);
+	}
+
 	vms  = calloc((size_t)opts.n_guests, sizeof(*vms));
 	args = calloc((size_t)opts.n_guests, sizeof(*args));
 	tids = calloc((size_t)opts.n_guests, sizeof(*tids));
@@ -102,6 +110,10 @@ int main(int argc, char *argv[])
 			.page_size = opts.page_kb,
 			.image     = opts.guests[i],
 			.id        = i,
+			.role      = opts.irq_session
+					? (i == opts.writer_id ? ROLE_WRITER : ROLE_READER)
+					: ROLE_NONE,
+			.irq_session = opts.irq_session,
 		};
 
 		if (pthread_create(&tids[i], NULL, vm_thread, &args[i]) != 0) {
@@ -117,6 +129,9 @@ int main(int argc, char *argv[])
 		if (args[i].rc != 0)
 			failures++;
 	}
+
+	if (opts.irq_session)
+		shared_buf_destroy();
 
 	free(vms);
 	free(args);

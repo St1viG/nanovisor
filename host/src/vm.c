@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "output.h"
 #include "hv_abi.h"
+#include "shared_buf.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -85,6 +86,7 @@ int vm_init(struct vm *v, const struct vm_config *cfg)
 
 void vm_destroy(struct vm *v)
 {
+	sb_vm_gone(v);
 	fileio_vm_destroy(v);
 
 	if (v->run && v->run != MAP_FAILED) {
@@ -323,7 +325,15 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 	if (fileio_vm_init(v) < 0)
 		return -1;
 
-	v->irq_pending = IRQ_COUNT;
+	v->role = (enum vm_role)cfg->role;
+	v->irq_session_active = cfg->irq_session;
+
+	/*
+		In a session the first interrupt assigns the mode and every later one
+		is scheduled by the coordinator; outside one, keep the starter's three
+		demonstration interrupts.
+	*/
+	v->irq_pending = cfg->irq_session ? 1 : IRQ_COUNT;
 
 	return 0;
 }
@@ -337,6 +347,119 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 	Port 0xE9 is the spec's serial port (part A). Any other port is a guest bug
 	at this stage; phases B and C add 0x0278, 0x510 and 0x520 here.
 */
+/*
+	Port 0x510. The spec overloads it three ways and the operand width plus the
+	VM's role is what tells them apart:
+
+	  IN,  1 byte, first interrupt : the assigned mode
+	  IN,  4 bytes, reader         : how many bytes this round carries
+	  IN,  1 byte,  reader         : one byte of the round
+	  OUT, 4 bytes, writer         : how many bytes are about to be sent
+	  OUT, 1 byte,  writer         : one byte
+
+	Direction is validated against the role, so a reader that tries to write to
+	the buffer (or the reverse) is a reported error rather than silent
+	corruption of somebody else's round.
+*/
+static int handle_buf_port(struct vm *v, char *base)
+{
+	int is_in = (v->run->io.direction == KVM_EXIT_IO_IN);
+	uint32_t size = v->run->io.size;
+
+	if (v->run->io.count != 1) {
+		out_printf(v->id, "port 0x%x used with count %u, expected 1\n",
+			   PORT_BUF, v->run->io.count);
+		return -1;
+	}
+
+	/* The very first read is the mode assignment, whatever the role. */
+	if (is_in && size == 1 && !v->mode_sent) {
+		*(uint8_t *)(base + v->run->io.data_offset) =
+			(v->role == ROLE_WRITER) ? HV_MODE_WRITE : HV_MODE_READ;
+		v->mode_sent = 1;
+		return 0;
+	}
+
+	if (v->role == ROLE_WRITER) {
+		if (is_in) {
+			out_printf(v->id, "writer read from port 0x%x\n", PORT_BUF);
+			return -1;
+		}
+
+		if (size == 4) {
+			sb_writer_begin(v, *(uint32_t *)(base + v->run->io.data_offset));
+			return 0;
+		}
+
+		if (size == 1) {
+			if (v->stream != STREAM_ACTIVE) {
+				out_printf(v->id, "writer sent a byte before its count\n");
+				return -1;
+			}
+			sb_writer_byte(v, *(uint8_t *)(base + v->run->io.data_offset));
+			return 0;
+		}
+	} else {
+		if (!is_in) {
+			out_printf(v->id, "reader wrote to port 0x%x\n", PORT_BUF);
+			return -1;
+		}
+
+		if (size == 4) {
+			*(uint32_t *)(base + v->run->io.data_offset) = sb_reader_count(v);
+			return 0;
+		}
+
+		if (size == 1) {
+			if (v->stream != STREAM_ACTIVE) {
+				out_printf(v->id, "reader took a byte before its count\n");
+				return -1;
+			}
+			*(uint8_t *)(base + v->run->io.data_offset) = sb_reader_byte(v);
+			return 0;
+		}
+	}
+
+	out_printf(v->id, "port 0x%x used with size %u\n", PORT_BUF, size);
+
+	return -1;
+}
+
+/*
+	Port 0x520. The writer reads back how many bytes were accepted (the excess
+	beyond BUFFER_SIZE is discarded); a reader reports how many it read, and is
+	stopped if that is short of the round.
+*/
+static int handle_ack_port(struct vm *v, char *base)
+{
+	if (v->run->io.size != 4 || v->run->io.count != 1) {
+		out_printf(v->id, "port 0x%x used with size %u count %u, expected 4/1\n",
+			   PORT_ACK, v->run->io.size, v->run->io.count);
+		return -1;
+	}
+
+	if (v->role == ROLE_WRITER) {
+		if (v->run->io.direction != KVM_EXIT_IO_IN) {
+			out_printf(v->id, "writer wrote to port 0x%x\n", PORT_ACK);
+			return -1;
+		}
+		*(uint32_t *)(base + v->run->io.data_offset) = (uint32_t)sb_writer_publish(v);
+		return 0;
+	}
+
+	if (v->run->io.direction != KVM_EXIT_IO_OUT) {
+		out_printf(v->id, "reader read from port 0x%x\n", PORT_ACK);
+		return -1;
+	}
+
+	if (sb_reader_ack(v, *(uint32_t *)(base + v->run->io.data_offset)) < 0) {
+		out_printf(v->id, "read fewer bytes than the round carried; stopping this VM\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int handle_io(struct vm *v)
 {
 	char *base = (char *)v->run;
@@ -381,6 +504,12 @@ static int handle_io(struct vm *v)
 		return 0;
 	}
 
+	if (v->irq_session_active && v->run->io.port == PORT_BUF)
+		return handle_buf_port(v, base);
+
+	if (v->irq_session_active && v->run->io.port == PORT_ACK)
+		return handle_ack_port(v, base);
+
 	out_printf(v->id, "unhandled IO %s on port 0x%x (size %u)\n",
 	       v->run->io.direction == KVM_EXIT_IO_OUT ? "OUT" : "IN",
 	       v->run->io.port, v->run->io.size);
@@ -416,6 +545,22 @@ int vm_run(struct vm *v)
 			}
 			break;
 		case KVM_EXIT_HLT:
+			/*
+				Design D5. The spec wants "terminate on hlt" in phase A and
+				"keep handling further interrupts" in phase C, which conflict:
+				with no in-kernel irqchip a halted vCPU exits immediately. The
+				hypervisor knows whether a session is live, so the guest needs
+				no signalling - hlt means "idle, awaiting the next interrupt"
+				during a session and "done" outside one.
+			*/
+			if (v->irq_session_active) {
+				if (!sb_wait_turn(v)) {
+					v->irq_pending = 1;
+					v->run->request_interrupt_window = 1;
+					break;
+				}
+				v->irq_session_active = 0;
+			}
 			out_flush(v);
 			out_printf(v->id, "KVM_EXIT_HLT\n");
 			return 0;

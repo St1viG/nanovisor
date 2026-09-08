@@ -18,6 +18,8 @@ void usage(const char *prog)
 		"  -p, --page   <4|2>          page size, 4 for 4KB or 2 for 2MB (default %d)\n"
 		"  -g, --guest  <img> [img...] guest images; one VM is launched per image\n"
 		"  -f, --file   <f> [f...]     files shared between VMs\n"
+		"  -i, --irq                   run the shared-buffer interrupt session\n"
+		"  -w, --writer <id>           VM that writes to the shared buffer (default 0)\n"
 		"  -h, --help                  this message\n",
 		prog, DEFAULT_MEM_MB, DEFAULT_PAGE_KB);
 }
@@ -102,6 +104,8 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 		{ "page",   required_argument, NULL, 'p' },
 		{ "guest",  required_argument, NULL, 'g' },
 		{ "file",   required_argument, NULL, 'f' },
+		{ "irq",    no_argument,       NULL, 'i' },
+		{ "writer", required_argument, NULL, 'w' },
 		{ "help",   no_argument,       NULL, 'h' },
 		{ NULL,     0,                 NULL, 0   },
 	};
@@ -113,7 +117,7 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 
 	/* The leading '+' disables GNU permutation: operands are ours to consume
 	   in collect_list, so getopt_long must never reorder them. */
-	while ((c = getopt_long(argc, argv, "+m:p:g:f:h", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "+m:p:g:f:iw:h", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'm':
 			if (parse_memory(optarg, &o->mem_mb) < 0)
@@ -131,6 +135,20 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 			if (collect_list(argc, argv, &o->files, &o->n_files) < 0)
 				return -1;
 			break;
+		case 'i':
+			o->irq_session = 1;
+			break;
+		case 'w': {
+			char *end;
+			long id = strtol(optarg, &end, 10);
+
+			if (*optarg == '\0' || *end != '\0' || id < 0) {
+				fprintf(stderr, "error: --writer expects a VM index (got '%s')\n", optarg);
+				return -1;
+			}
+			o->writer_id = (int)id;
+			break;
+		}
 		case 'h':
 			usage(argv[0]);
 			return 1;
@@ -152,6 +170,16 @@ int parse_options(int argc, char **argv, struct hv_options *o)
 		usage(argv[0]);
 		return -1;
 	}
+
+	if (o->writer_id >= o->n_guests) {
+		fprintf(stderr, "error: --writer %d but only %d guest(s) were given\n",
+			o->writer_id, o->n_guests);
+		usage(argv[0]);
+		return -1;
+	}
+
+	if (o->writer_id != 0 && !o->irq_session)
+		fprintf(stderr, "warning: --writer has no effect without --irq\n");
 
 	return 0;
 }

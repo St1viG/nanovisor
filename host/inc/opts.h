@@ -21,6 +21,8 @@ struct hv_options {
 	int    n_guests;
 	char **files;
 	int    n_files;
+	int    irq_session;   /* -i: run the phase C shared-buffer session */
+	int    writer_id;     /* -w: which VM writes; the rest read */
 };
 
 int  parse_options(int argc, char **argv, struct hv_options *o);
