@@ -79,7 +79,20 @@ grep -q 'traversal attempt        -> -1' <<<"$out" \
 	&& ok "path traversal rejected by the name rules" || bad "traversal not rejected"
 
 echo
-echo "5. hostile guest input"
+echo "5. two descriptors on one shared file"
+rm -rf vm_0
+printf '%s\n' "$ORIGINAL" > shared.txt
+cp shared.txt shared.txt.orig
+run -m 4 -p 2 -g $IMG/cow_twice.img -f shared.txt >/dev/null
+# Each fd triggers CoW independently; the second must not discard the first's
+# write by re-copying the original over the private file.
+[ "$(cat vm_0/shared.txt 2>/dev/null)" = "AAAAed filBBBBiginal contents" ] \
+	&& ok "both descriptors' writes survived copy-on-write" \
+	|| bad "a write was lost across the second CoW" "$(cat vm_0/shared.txt 2>/dev/null)"
+cmp -s shared.txt shared.txt.orig && ok "original still untouched" || bad "original modified"
+
+echo
+echo "6. hostile guest input"
 rm -rf vm_0
 out="$(run -m 4 -p 2 -g $IMG/hostile.img)"
 grep -q 'survived' <<<"$out" \

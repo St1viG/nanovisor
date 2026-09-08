@@ -306,6 +306,17 @@ static int cow_materialize(struct vm *v, struct guest_file *f)
 	if (snprintf(local, sizeof(local), "vm_%d/%s", v->id, f->name) >= (int)sizeof(local))
 		return -1;
 
+	/*
+		The copy may already exist: a guest can hold two descriptors on the same
+		shared file, and each triggers copy-on-write independently. Copying
+		again would truncate the private file and silently discard whatever was
+		written through the other descriptor, so an existing local copy is
+		adopted rather than recreated.
+	*/
+	rw = open(local, O_RDWR);
+	if (rw >= 0)
+		goto adopt;
+
 	src = open(f->host_path, O_RDONLY);
 	if (src < 0) {
 		out_printf(v->id, "cow: cannot read %s: %s\n", f->host_path, strerror(errno));
@@ -351,6 +362,7 @@ static int cow_materialize(struct vm *v, struct guest_file *f)
 		return -1;
 	}
 
+adopt:
 	close(f->hostfd);
 	f->hostfd = rw;
 	f->cow    = 1;
