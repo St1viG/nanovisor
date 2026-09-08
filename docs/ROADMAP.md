@@ -13,9 +13,9 @@ Implementation roadmap for the AOR2 KVM hypervisor project. The assignment itsel
 Update as you go.
 
 ```
-Engineering progress:  8 / 100
-Assignment points:     0 / 45
-Current phase:         A (Basic hypervisor)
+Engineering progress:  33 / 100
+Assignment points:     15 / 45
+Current phase:         B (File support)
 ```
 
 | Milestone | Engineering % | Points secured |
@@ -285,42 +285,50 @@ Covers `PROJECT_en.md` lines 42–50 and the "Option validation" section.
 
 ### Tasks
 
-- [ ] **A.1** — Option parser: `struct hv_options { int mem_mb; int page_kb; char **guests; int n_guests;
+- [x] **A.1** — Option parser: `struct hv_options { int mem_mb; int page_kb; char **guests; int n_guests;
       char **files; int n_files; }`, `parse_options()`, and the variadic collector
       `collect_list(int argc, char **argv, int *idx, char ***out, int *n)` that consumes `argv[optind]`
       while it does not begin with `-` — **4 pts** · `host/inc/opts.h`, `host/src/opts.c` (new)
       <br>`getopt_long` gives one `optarg`; the spec's `-g a.img b.img` needs more. Consume the extra
       operands *inside* the `case 'g'`/`case 'f'` handler so getopt never scans or permutes them.
       Reused verbatim by `-f` in Phase B.
-- [ ] **A.2** — Validation: `-m ∈ {2,4,8}`, `-p ∈ {4,2}` (accept `4`/`4KB`/`2`/`2MB`), `n_guests ≥ 1`,
+- [x] **A.2** — Validation: `-m ∈ {2,4,8}`, `-p ∈ {4,2}` (accept `4`/`4KB`/`2`/`2MB`), `n_guests ≥ 1`,
       unknown option, missing argument → message on stderr + `exit(1)` — **2 pts** · `host/src/opts.c`
       <br>Graded in *every* phase, not just A.
-- [ ] **A.3** — Parametric paging: replace `setup_long_mode` with `setup_paging_4k()` and
+- [x] **A.3** — Parametric paging: replace `setup_long_mode` with `setup_paging_4k()` and
       `setup_paging_2m()`; identity-map `[0, mem_size)` per D1 — **5 pts** · `host/src/vm.c:128`, `host/inc/vm.h`
-- [ ] **A.4** — Relocate guest to `0x8000`: add `. = 0x8000;` to `guest.ld` (deferred here from 0.3),
+- [x] **A.4** — Relocate guest to `0x8000`: add `. = 0x8000;` to `guest.ld` (deferred here from 0.3),
       `rip = GUEST_START_ADDR`, `rsp = mem_size`; drop
       `GUEST_CODE_PAGES` and the `pt[511]` stack hack — **2 pts**
       · `host/src/vm.c`, `host/src/main.c:47-50`, `guest/guest.ld`
-- [ ] **A.5** — Port `0xE9` **IN**: host feeds a byte into `((char *)run) + run->io.data_offset`; guest
+- [x] **A.5** — Port `0xE9` **IN**: host feeds a byte into `((char *)run) + run->io.data_offset`; guest
       gains `inb(0xE9)` — **2 pts** · `host/src/vm.c`, `guest/inc/io.h`
-- [ ] **A.6** — `struct vm` gains `int id` and `struct vm_config cfg`; `vm_init` mmaps `cfg.mem_size`
+- [x] **A.6** — `struct vm` gains `int id` and `struct vm_config cfg`; `vm_init` mmaps `cfg.mem_size`
       — **1 pt** · `host/inc/vm.h`, `host/src/vm.c:11`
-- [ ] **A.7** — One pthread per guest: `void *vm_thread(void *)` performing the full
+      <br>Landed early: `struct vm_config` arrived with 0.6 and `vm_init` began mmapping `cfg.mem_size`
+      with A.3. No separate commit.
+- [x] **A.7** — One pthread per guest: `void *vm_thread(void *)` performing the full
       `vm_init` → `vm_setup` → `vm_run` → `vm_destroy` cycle (per D7); `main` spawns `n_guests` threads and
       joins, aggregating statuses — **4 pts** · `host/src/main.c`
-- [ ] **A.8** — Exit-reason handling: `const char *kvm_exit_name(uint32_t)`; on an unexpected exit print
+- [x] **A.8** — Exit-reason handling: `const char *kvm_exit_name(uint32_t)`; on an unexpected exit print
       `[vm N] unexpected exit: <name> (code)` plus a `KVM_GET_REGS`/`KVM_GET_SREGS` dump; return from that
       thread only, siblings unaffected — **3 pts** · `host/src/vm.c`
       <br>For `KVM_EXIT_FAIL_ENTRY` / `KVM_EXIT_INTERNAL_ERROR` also print
       `run->fail_entry.hardware_entry_failure_reason` / `run->internal.suberror`.
-- [ ] **A.9** — Output serialization: per-VM line buffer flushed under a global stdout mutex, `[vmN]`
+- [x] **A.9** — Output serialization: per-VM line buffer flushed under a global stdout mutex, `[vmN]`
       prefix — **1 pt** · `host/src/vm.c`, `host/src/main.c`
-- [ ] **A.10** — Guest build restructure: shared objects in `guest/lib/`, one image per
+- [x] **A.10** — Guest build restructure: shared objects in `guest/lib/`, one image per
       `guest/tests/<name>.c` → `guest/build/<name>.img` — **1 pt** · `guest/Makefile`
+      <br>`lib/start.c` owns `_start` and calls each image's `guest_main()`. It also records
+      `guest_mem_top` from the initial `rsp` (the host sets `rsp = mem_size`), so a guest knows how much
+      memory it has without a new port — `mem_probe` relies on this.
 
 ### Verification — 3 demos
 
-**Test images:** `guest/tests/hello.c`, `guest/tests/mem_probe.c`, `guest/tests/crash.c`
+Scripted end to end in `scripts/test_phase_a.sh` (19 checks). **Passing.**
+
+**Test images:** `guest/tests/hello.c`, `guest/tests/mem_probe.c`, `guest/tests/crash.c`,
+`guest/tests/echo.c`
 
 1. **Multiple VMs.**
    ```sh
@@ -335,7 +343,7 @@ Covers `PROJECT_en.md` lines 42–50 and the "Option validation" section.
    done; done
    ```
 3. **Option validation.** `-m 3` → `error: --memory must be 2, 4 or 8 (got 3)`, exit 1. `-p 8` likewise.
-   `-g` with no files → error.
+   `-g` with no files → error. Also covered: unknown option, missing argument, stray operand.
 4. **Fault isolation.**
    ```sh
    ./host/build/hypervisor -m 4 -p 4 -g guest/build/crash.img guest/build/hello.img
