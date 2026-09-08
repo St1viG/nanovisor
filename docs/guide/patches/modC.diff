@@ -1,0 +1,399 @@
+diff --git a/common/hv_abi.h b/common/hv_abi.h
+index 42099dc..8e52149 100644
+--- a/common/hv_abi.h
++++ b/common/hv_abi.h
+@@ -11,6 +11,14 @@
+ #define PORT_SERIAL 0xE9
+ #define IRQ_VECTOR  32
+ 
++/*
++	Modification C: after each round the writer reads one byte of standard
++	input. STOP_CHAR makes the hypervisor stop every VM by injecting
++	IRQ_VECTOR_STOP, whose handler is the guest's cue to halt for good.
++*/
++#define IRQ_VECTOR_STOP 33
++#define STOP_CHAR       'k'
++
+ /*
+ 	The guest/hypervisor file ABI (design D2), included verbatim by both sides.
+ 
+diff --git a/guest/inc/irqproto.h b/guest/inc/irqproto.h
+index b95163c..00a1aec 100644
+--- a/guest/inc/irqproto.h
++++ b/guest/inc/irqproto.h
+@@ -17,6 +17,12 @@
+ void guest_writer_round(void);
+ void guest_reader_round(void);
+ 
++/*
++	Modification C: called from the vector-33 handler just before the VM
++	stops. Optional, like the round hooks; a typical image closes its file.
++*/
++void guest_stop(void);
++
+ /* The assigned mode, valid after the first interrupt. -1 until then. */
+ extern volatile int guest_mode;
+ 
+diff --git a/guest/lib/interrupts.c b/guest/lib/interrupts.c
+index 80498c5..3aeb039 100644
+--- a/guest/lib/interrupts.c
++++ b/guest/lib/interrupts.c
+@@ -13,6 +13,7 @@ static struct idt_entry idt[IDT_ENTRIES];
+ */
+ extern void guest_writer_round(void) __attribute__((weak));
+ extern void guest_reader_round(void) __attribute__((weak));
++extern void guest_stop(void) __attribute__((weak));   /* modification C */
+ 
+ /*
+ 	SSE instrukcije su zabranjene unutar __attribute__((interrupt)) handlera;
+@@ -47,6 +48,27 @@ irq32_handler(struct interrupt_frame *frame)
+ 	}
+ }
+ 
++/*
++	Modification C: vector 33 means "stop". An image may define guest_stop()
++	to close its files and say so; either way the handler returns, the main
++	loop halts again, and the hypervisor terminates the VM on that halt.
++*/
++static void __attribute__((interrupt))
++irq33_handler(struct interrupt_frame *frame)
++{
++	const char *s;
++
++	(void)frame;
++
++	if (guest_stop) {
++		guest_stop();
++		return;
++	}
++
++	for (s = "stopped by vector 33\n"; *s; ++s)
++		outb(PORT_SERIAL, *s);
++}
++
+ static void set_idt_gate(unsigned n, void (*handler)(struct interrupt_frame *))
+ {
+ 	uint64_t addr = (uint64_t)(uintptr_t)handler;
+@@ -64,6 +86,7 @@ void init_idt(void)
+ 	struct dt_ptr p;
+ 
+ 	set_idt_gate(IRQ_VECTOR, irq32_handler);
++	set_idt_gate(IRQ_VECTOR_STOP, irq33_handler);
+ 
+ 	p.limit = sizeof(idt) - 1;
+ 	p.base  = (uint64_t)(uintptr_t)idt;
+diff --git a/guest/tests/irq_reader.c b/guest/tests/irq_reader.c
+index 737c613..5fc48bb 100644
+--- a/guest/tests/irq_reader.c
++++ b/guest/tests/irq_reader.c
+@@ -33,6 +33,13 @@ void guest_reader_round(void)
+ 		write(dst_fd, chunk, (int)got);
+ }
+ 
++void guest_stop(void)
++{
++	if (dst_fd >= 0)
++		close(dst_fd);
++	print("reader: stopped by vector 33\n");
++}
++
+ void guest_main(void)
+ {
+ 	dst_fd = open("out.txt", O_RDWR | O_CREATE);
+diff --git a/guest/tests/irq_writer.c b/guest/tests/irq_writer.c
+index 3cf898f..c033221 100644
+--- a/guest/tests/irq_writer.c
++++ b/guest/tests/irq_writer.c
+@@ -29,6 +29,14 @@ void guest_writer_round(void)
+ 
+ 	hv_buf_send(chunk, (uint32_t)n);
+ 
++	/*
++		Modification C: after each data round the writer reads one byte of
++		standard input. The hypervisor sees that byte on its way through, and
++		STOP_CHAR makes it stop every VM, this one included.
++	*/
++	if (n > 0 && getch() == STOP_CHAR)
++		print("writer: stop requested from stdin\n");
++
+ 	/* Design D6: a zero-length round is the end-of-stream sentinel. */
+ 	if (n == 0) {
+ 		finished = 1;
+@@ -38,6 +46,13 @@ void guest_writer_round(void)
+ 	}
+ }
+ 
++void guest_stop(void)
++{
++	if (src_fd >= 0)
++		close(src_fd);
++	print("writer: stopped by vector 33\n");
++}
++
+ void guest_main(void)
+ {
+ 	src_fd = open("input.txt", O_RD);
+diff --git a/host/inc/shared_buf.h b/host/inc/shared_buf.h
+index 5107e31..361a012 100644
+--- a/host/inc/shared_buf.h
++++ b/host/inc/shared_buf.h
+@@ -31,18 +31,27 @@ struct shared_buf {
+ 	int readers_pending;       /* readers that have not acknowledged this round */
+ 	int eof;                   /* the count == 0 sentinel round was published */
+ 	int over;                  /* session finished; every VM may terminate */
++	int stopped;               /* modification C: STOP_CHAR seen; stop after the current round */
+ };
+ 
+ void shared_buf_init(int readers_total, int verbose);
+ void shared_buf_destroy(void);
+ 
+ /*
+-	Blocks this VM's thread until it should receive its next vector-32
+-	interrupt. Returns 1 when the session is over and the VM should halt for
+-	real (design D5). This is the only place a VM thread blocks.
++	Blocks this VM's thread until something is due. Returns SB_ROUND when the
++	next vector-32 interrupt should be injected, SB_OVER when the session is
++	over and the VM should halt for real (design D5), and SB_STOPPED when the
++	VM must receive IRQ_VECTOR_STOP and then halt (modification C). This is
++	the only place a VM thread blocks.
+ */
++#define SB_ROUND   0
++#define SB_OVER    1
++#define SB_STOPPED 2
+ int sb_wait_turn(struct vm *v);
+ 
++/* Modification C: the writer read STOP_CHAR; wake everyone so they stop. */
++void sb_stop_all(struct vm *v);
++
+ /* Writer side, all non-blocking: the barrier has already been passed. */
+ int     sb_writer_begin(struct vm *v, uint32_t count);
+ int     sb_writer_byte(struct vm *v, uint8_t byte);
+diff --git a/host/inc/vm.h b/host/inc/vm.h
+index 290562d..e7e435e 100644
+--- a/host/inc/vm.h
++++ b/host/inc/vm.h
+@@ -105,6 +105,7 @@ struct vm {
+ 	uint32_t          stream_index;       /* how many have crossed so far */
+ 	uint64_t          last_round;         /* last round this VM consumed */
+ 	int               round_pending;      /* consumed a round, not yet acknowledged */
++	int               stop_pending;       /* modification C: next injection is IRQ_VECTOR_STOP */
+ };
+ 
+ int  vm_init(struct vm *v, const struct vm_config *cfg);
+diff --git a/host/src/shared_buf.c b/host/src/shared_buf.c
+index 9775e58..4b15fb7 100644
+--- a/host/src/shared_buf.c
++++ b/host/src/shared_buf.c
+@@ -41,11 +41,11 @@ static void dump_state(struct vm *v, const char *waiting_for)
+ {
+ 	out_printf(v->id, "watchdog: %ds waiting for %s "
+ 			  "(role=%s round=%llu last_round=%llu readers_total=%d "
+-			  "readers_pending=%d eof=%d over=%d)\n",
++			  "readers_pending=%d eof=%d over=%d stopped=%d)\n",
+ 		   WATCHDOG_SECONDS, waiting_for,
+ 		   v->role == ROLE_WRITER ? "writer" : "reader",
+ 		   (unsigned long long)buf.round, (unsigned long long)v->last_round,
+-		   buf.readers_total, buf.readers_pending, buf.eof, buf.over);
++		   buf.readers_total, buf.readers_pending, buf.eof, buf.over, buf.stopped);
+ }
+ 
+ /*
+@@ -69,17 +69,17 @@ static void wait_with_watchdog(struct vm *v, int (*pred)(struct vm *), const cha
+ static int writer_ready(struct vm *v)
+ {
+ 	(void)v;
+-	return buf.over || buf.readers_pending == 0;
++	return buf.over || buf.stopped || buf.readers_pending == 0;
+ }
+ 
+ static int reader_ready(struct vm *v)
+ {
+-	return buf.over || buf.round > v->last_round;
++	return buf.over || buf.stopped || buf.round > v->last_round;
+ }
+ 
+ int sb_wait_turn(struct vm *v)
+ {
+-	int over;
++	int rc;
+ 
+ 	pthread_mutex_lock(&buf.m);
+ 
+@@ -91,17 +91,31 @@ int sb_wait_turn(struct vm *v)
+ 		*/
+ 		if (buf.eof && buf.readers_pending == 0)
+ 			buf.over = 1;
++
++		if (buf.stopped)
++			rc = SB_STOPPED;
++		else
++			rc = buf.over ? SB_OVER : SB_ROUND;
+ 	} else {
+ 		wait_with_watchdog(v, reader_ready, "the writer to publish a round");
++		/*
++			Modification C: a round published before the stop is still consumed,
++			so every reader ends with exactly the rounds the writer sent.
++		*/
++		if (buf.over)
++			rc = SB_OVER;
++		else if (buf.round > v->last_round)
++			rc = SB_ROUND;
++		else
++			rc = SB_STOPPED;
+ 	}
+ 
+-	over = buf.over;
+-	if (over)
++	if (rc != SB_ROUND)
+ 		pthread_cond_broadcast(&buf.cv);
+ 
+ 	pthread_mutex_unlock(&buf.m);
+ 
+-	return over;
++	return rc;
+ }
+ 
+ /* ----------------------------------------------------------- writer side */
+@@ -226,6 +240,21 @@ int sb_reader_ack(struct vm *v, uint32_t n_read)
+ 	return short_read ? -1 : 0;
+ }
+ 
++/* --------------------------------------------------------------- stopping */
++
++void sb_stop_all(struct vm *v)
++{
++	pthread_mutex_lock(&buf.m);
++
++	if (!buf.stopped) {
++		buf.stopped = 1;
++		out_printf(v->id, "stop: '%c' on stdin, stopping every VM\n", STOP_CHAR);
++	}
++
++	pthread_cond_broadcast(&buf.cv);
++	pthread_mutex_unlock(&buf.m);
++}
++
+ /* --------------------------------------------------------------- teardown */
+ 
+ void sb_vm_gone(struct vm *v)
+diff --git a/host/src/vm.c b/host/src/vm.c
+index 354f8f9..075dce3 100644
+--- a/host/src/vm.c
++++ b/host/src/vm.c
+@@ -528,6 +528,10 @@ static int handle_io(struct vm *v)
+ 
+ 		/* IN: hand the guest one byte of the hypervisor's stdin. */
+ 		*io_u8(v) = in_byte();
++
++		/* Modification C: the writer's STOP_CHAR stops every VM in the session. */
++		if (v->irq_session_active && v->role == ROLE_WRITER && *io_u8(v) == STOP_CHAR)
++			sb_stop_all(v);
+ 		return 0;
+ 	}
+ 
+@@ -592,7 +596,7 @@ int vm_run(struct vm *v)
+ 			break;
+ 		case KVM_EXIT_IRQ_WINDOW_OPEN:
+ 			if (v->irq_pending > 0) {
+-				if (inject_irq(v, IRQ_VECTOR) < 0)
++				if (inject_irq(v, v->stop_pending ? IRQ_VECTOR_STOP : IRQ_VECTOR) < 0)
+ 					return -1;
+ 				v->irq_pending--;
+ 			} else {
+@@ -609,7 +613,18 @@ int vm_run(struct vm *v)
+ 				during a session and "done" outside one.
+ 			*/
+ 			if (v->irq_session_active) {
+-				if (!sb_wait_turn(v)) {
++				int rc = sb_wait_turn(v);
++
++				if (rc == SB_STOPPED) {
++					/*
++						Modification C: deliver IRQ_VECTOR_STOP once. The
++						handler returns, the guest halts again, and with the
++						session already marked over that halt terminates it.
++					*/
++					v->irq_session_active = 0;
++					v->stop_pending = 1;
++				}
++				if (rc != SB_OVER) {
+ 					v->irq_pending = 1;
+ 					v->run->request_interrupt_window = 1;
+ 					break;
+diff --git a/scripts/demo_c.sh b/scripts/demo_c.sh
+index 7d4a549..ad90489 100755
+--- a/scripts/demo_c.sh
++++ b/scripts/demo_c.sh
+@@ -17,7 +17,7 @@ heading "C2  The barrier: the writer never advances before every reader acks"
+ rm -rf vm_0 vm_1 vm_2
+ python3 -c "open('input.txt','w').write('A'*64 + 'B'*64 + 'C'*20)"
+ echo "input.txt is 148 bytes and BUFFER_SIZE is 64, so this is 3 rounds + the sentinel."
+-step $HV -m 4 -p 2 -i -v -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt
++step $HV -m 4 -p 2 -i -v -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt </dev/null
+ echo
+ echo "Read the trace: readers_pending reaches 0 before every 'writer published'."
+ pause
+@@ -28,7 +28,7 @@ python3 -c "
+ lines = ['line %03d: the quick brown fox jumps over the lazy dog' % i for i in range(1, 21)]
+ open('input.txt','w').write('\n'.join(lines) + '\n')"
+ step wc -c input.txt
+-step $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt
++step $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt </dev/null
+ step cmp input.txt vm_1/out.txt
+ step cmp input.txt vm_2/out.txt
+ pause
+@@ -40,6 +40,17 @@ pause
+ heading "C5  A reader that dies mid-session must not deadlock the writer"
+ rm -rf vm_0 vm_1 vm_2
+ python3 -c "open('input.txt','w').write('X'*200)"
+-step $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/crash.img -f input.txt
++step $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/crash.img -f input.txt </dev/null
+ step cmp input.txt vm_1/out.txt
++pause
++
++heading "C6  Modification C: 'k' on the writer's stdin stops every VM through vector 33"
++rm -rf vm_0 vm_1 vm_2
++python3 -c "open('input.txt','w').write('X'*200)"
++echo "200 bytes is 4 rounds. The writer reads one stdin byte after each round: x, x, then k."
++echo
++echo "\$ printf 'xxk' | $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt"
++printf 'xxk' | $HV -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt
++step wc -c vm_1/out.txt vm_2/out.txt
++echo "Interactively: run without the pipe and press k after any round."
+ rm -f input.txt
+diff --git a/scripts/test_phase_c.sh b/scripts/test_phase_c.sh
+index d5d7db2..166ac74 100755
+--- a/scripts/test_phase_c.sh
++++ b/scripts/test_phase_c.sh
+@@ -16,7 +16,8 @@ fail=0
+ ok()  { echo "  PASS  $1"; pass=$((pass + 1)); }
+ bad() { echo "  FAIL  $1"; [ $# -gt 1 ] && echo "        $2"; fail=$((fail + 1)); }
+ 
+-run() { timeout 30 "$HV" "$@" 2>&1; }
++# stdin is closed: the writer reads one byte of it after every round (modification C).
++run() { timeout 30 "$HV" "$@" 2>&1 </dev/null; }
+ 
+ echo "==> building"
+ make -C host >/dev/null 2>&1 && make -C guest >/dev/null 2>&1 || { echo "build failed"; exit 1; }
+@@ -136,6 +137,21 @@ elapsed=$(( $(date +%s) - start ))
+ 	&& ok "writer that fails to load does not hang the readers (${elapsed}s)" \
+ 	|| bad "hung when the writer failed to load (${elapsed}s)"
+ 
++echo
++echo "9. STOP_CHAR on the writer's stdin stops every VM (modification C)"
++rm -rf vm_0 vm_1 vm_2
++python3 -c "open('input.txt','w').write('X'*200)"
++# 200 bytes is 4 rounds; the third stdin byte is 'k', so 3 rounds are delivered.
++out="$(printf 'xxk' | timeout 30 "$HV" -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_reader.img -f input.txt 2>&1)"
++grep -q 'stopping every VM' <<<"$out" \
++	&& ok "the hypervisor reported the stop" || bad "no stop report" "$out"
++[ "$(grep -c 'stopped by vector 33' <<<"$out")" = 3 ] \
++	&& ok "every VM ran its vector 33 handler" || bad "vector 33 handlers ran: $(grep -c 'stopped by vector 33' <<<"$out")" "$out"
++[ "$(grep -c 'KVM_EXIT_HLT' <<<"$out")" = 3 ] \
++	&& ok "every VM terminated" || bad "not every VM terminated" "$out"
++[ "$(stat -c %s vm_1/out.txt)" = 192 ] && [ "$(stat -c %s vm_2/out.txt)" = 192 ] \
++	&& ok "readers kept the 3 rounds published before the stop" || bad "reader sizes: $(stat -c %s vm_1/out.txt vm_2/out.txt | tr '\\n' ' ')"
++
+ rm -f input.txt small.txt
+ rm -rf vm_0 vm_1 vm_2
+ 
