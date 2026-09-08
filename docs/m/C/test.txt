@@ -1,0 +1,2 @@
+Pokrenuti 3 VM, A, B i C. VM A čita iz deljenog fajla i upisuje u deljeni bafer, dok VM B i C čitaju iz deljenog bafera
+i upisuju u lokalni fajl.
