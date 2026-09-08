@@ -8,6 +8,11 @@ void putch(char c)
 	outb(SERIAL_PORT, (uint8_t)c);
 }
 
+char getch(void)
+{
+	return (char)inb(SERIAL_PORT);
+}
+
 void print(const char *s)
 {
 	while (*s)

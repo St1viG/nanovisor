@@ -335,8 +335,20 @@ static int handle_io(struct vm *v)
 {
 	char *base = (char *)v->run;
 
-	if (v->run->io.port == SERIAL_PORT && v->run->io.direction == KVM_EXIT_IO_OUT) {
-		out_char(v, *(base + v->run->io.data_offset));
+	if (v->run->io.port == SERIAL_PORT) {
+		if (v->run->io.size != 1) {
+			out_printf(v->id, "serial port 0x%x used with size %u, expected 1\n",
+				   SERIAL_PORT, v->run->io.size);
+			return -1;
+		}
+
+		if (v->run->io.direction == KVM_EXIT_IO_OUT) {
+			out_char(v, *(base + v->run->io.data_offset));
+			return 0;
+		}
+
+		/* IN: hand the guest one byte of the hypervisor's stdin. */
+		*(unsigned char *)(base + v->run->io.data_offset) = in_byte();
 		return 0;
 	}
 

@@ -58,3 +58,17 @@ void out_printf(int id, const char *fmt, ...)
 
 	emit_locked(id, line, n);
 }
+
+/* stdin is shared by every VM thread, so reads take their own lock. */
+static pthread_mutex_t in_lock = PTHREAD_MUTEX_INITIALIZER;
+
+unsigned char in_byte(void)
+{
+	int c;
+
+	pthread_mutex_lock(&in_lock);
+	c = getchar();
+	pthread_mutex_unlock(&in_lock);
+
+	return c == EOF ? 0 : (unsigned char)c;
+}
