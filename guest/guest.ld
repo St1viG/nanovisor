@@ -3,8 +3,9 @@ ENTRY(_start)
 
 SECTIONS
 {
-        /* Origin stays implicit-0 while the host maps GVA 0..0xFFFF -> GPA 0x8000.
-           Task A.4 flips it to 0x8000 together with the identity map (design D1). */
+        /* Design D1: the image is loaded at GPA 0x8000 and [0, mem_size) is
+           identity mapped, so the guest is linked at its run address. */
+        . = 0x8000;
 
         .start   : { *(.start) }
         .text    : { *(.text*) }

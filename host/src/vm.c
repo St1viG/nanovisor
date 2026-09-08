@@ -129,35 +129,81 @@ static void setup_segments_64(struct kvm_sregs *sregs)
 	sregs->ds = sregs->es = sregs->fs = sregs->gs = sregs->ss = data;
 }
 
-void setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
+/*
+	Identity map [0, mem_size) with 4 KB pages. mem_size/4096 PTEs are needed:
+	512 / 1024 / 2048 for 2 / 4 / 8 MB, i.e. 1 / 2 / 4 page tables, which is
+	exactly what fits in the reserved region below GUEST_START_ADDR.
+*/
+void setup_paging_4k(struct vm *v)
 {
-	uint64_t pml4_addr = 0x1000;
-	uint64_t *pml4 = (void *)(v->mem + pml4_addr);
+	const uint64_t flags = PDE64_PRESENT | PDE64_RW | PDE64_USER;
+	uint64_t *pml4 = (void *)(v->mem + PML4_ADDR);
+	uint64_t *pdpt = (void *)(v->mem + PDPT_ADDR);
+	uint64_t *pd   = (void *)(v->mem + PD_ADDR);
+	size_t n_pages = v->mem_size / PAGE_4K;
+	size_t n_pts   = (n_pages + PTES_PER_TABLE - 1) / PTES_PER_TABLE;
+	size_t i, j;
 
-	uint64_t pdpt_addr = 0x2000;
-	uint64_t *pdpt = (void *)(v->mem + pdpt_addr);
+	pml4[0] = flags | PDPT_ADDR;
+	pdpt[0] = flags | PD_ADDR;
 
-	uint64_t pd_addr = 0x3000;
-	uint64_t *pd = (void *)(v->mem + pd_addr);
+	for (i = 0; i < n_pts; i++) {
+		uint64_t pt_addr = PT_BASE + i * PAGE_4K;
+		uint64_t *pt = (void *)(v->mem + pt_addr);
 
-	uint64_t pt_addr = 0x4000;
-	uint64_t *pt = (void *)(v->mem + pt_addr);
+		pd[i] = flags | pt_addr;
 
-	pml4[0] = PDE64_PRESENT | PDE64_RW | PDE64_USER | pdpt_addr;
-	pdpt[0] = PDE64_PRESENT | PDE64_RW | PDE64_USER | pd_addr;
-	pd[0]   = PDE64_PRESENT | PDE64_RW | PDE64_USER | pt_addr;
+		for (j = 0; j < PTES_PER_TABLE; j++)
+			pt[j] = ((i * PTES_PER_TABLE + j) * PAGE_4K) | flags;
+	}
+}
 
-	for (int i = 0; i < GUEST_CODE_PAGES; i++)
-		pt[i] = (GUEST_START_ADDR + i * 0x1000) | PDE64_PRESENT | PDE64_RW | PDE64_USER;
+/*
+	Identity map [0, mem_size) with 2 MB pages: PML4 + PDPT + PD only, with
+	PDE64_PS set on 1 / 2 / 4 PD entries. The page tables themselves live
+	inside the first 2 MB page they map.
+*/
+void setup_paging_2m(struct vm *v)
+{
+	const uint64_t flags = PDE64_PRESENT | PDE64_RW | PDE64_USER;
+	uint64_t *pml4 = (void *)(v->mem + PML4_ADDR);
+	uint64_t *pdpt = (void *)(v->mem + PDPT_ADDR);
+	uint64_t *pd   = (void *)(v->mem + PD_ADDR);
+	size_t n_pd = v->mem_size / PAGE_2M;
+	size_t i;
 
-	pt[511] = 0x6000 | PDE64_PRESENT | PDE64_RW | PDE64_USER;
+	pml4[0] = flags | PDPT_ADDR;
+	pdpt[0] = flags | PD_ADDR;
 
-	sregs->cr3  = pml4_addr;
+	for (i = 0; i < n_pd; i++)
+		pd[i] = (i * PAGE_2M) | flags | PDE64_PS;
+}
+
+int setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
+{
+	/* Entries left untouched below must read as not-present. */
+	memset(v->mem, 0, GUEST_START_ADDR);
+
+	switch (v->cfg.page_size) {
+	case PAGE_SIZE_4K:
+		setup_paging_4k(v);
+		break;
+	case PAGE_SIZE_2M:
+		setup_paging_2m(v);
+		break;
+	default:
+		fprintf(stderr, "unsupported page size %d KB\n", v->cfg.page_size);
+		return -1;
+	}
+
+	sregs->cr3  = PML4_ADDR;
 	sregs->cr4  = CR4_PAE;
 	sregs->cr0  = CR0_PE | CR0_PG;
 	sregs->efer = EFER_LME | EFER_LMA;
 
 	setup_segments_64(sregs);
+
+	return 0;
 }
 
 int vm_setup(struct vm *v, const struct vm_config *cfg)
@@ -170,7 +216,8 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 		return -1;
 	}
 
-	setup_long_mode(v, &sregs);
+	if (setup_long_mode(v, &sregs) < 0)
+		return -1;
 
 	if (ioctl(v->vcpu_fd, KVM_SET_SREGS, &sregs) < 0) {
 		perror("KVM_SET_SREGS");
@@ -184,8 +231,8 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 
 	memset(&regs, 0, sizeof(regs));
 	regs.rflags = 0x2;
-	regs.rip    = 0;          /* GVA 0 maps to GPA GUEST_START_ADDR until task A.4 */
-	regs.rsp    = 2 << 20;    /* == MEM_SIZE; becomes cfg->mem_size in A.4 */
+	regs.rip    = GUEST_START_ADDR;   /* GVA == GPA; the image is linked at 0x8000 */
+	regs.rsp    = v->mem_size;        /* stack grows down from the top of guest memory */
 
 	if (ioctl(v->vcpu_fd, KVM_SET_REGS, &regs) < 0) {
 		perror("KVM_SET_REGS");
@@ -269,8 +316,15 @@ int load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr)
 	}
 	rewind(f);
 
-	if ((uint64_t)fsz > v->mem_size - load_addr) {
-		printf("Guest image is too large for the VM memory\n");
+	/*
+		Risk 7: the image is only the start of what the guest occupies - .bss
+		follows it and the stack grows down from mem_size. Refuse an image that
+		leaves no room between the two rather than triple-faulting on first touch.
+	*/
+	if (load_addr >= v->mem_size ||
+	    (uint64_t)fsz + GUEST_MIN_SLACK > v->mem_size - load_addr) {
+		fprintf(stderr, "guest image %s (%ld bytes) does not fit in %zu bytes of guest memory\n",
+			image_path, fsz, v->mem_size);
 		fclose(f);
 		return -1;
 	}

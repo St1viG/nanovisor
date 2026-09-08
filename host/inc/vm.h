@@ -7,7 +7,31 @@
 
 #define MEM_SIZE         (2u * 1024u * 1024u)
 #define GUEST_START_ADDR 0x8000
-#define GUEST_CODE_PAGES 16
+
+/*
+	Design D1 - guest physical memory layout.
+
+	  0x0000            unused
+	  0x1000            PML4
+	  0x2000            PDPT
+	  0x3000            PD
+	  0x4000 .. 0x7000  PT[0..3]        (4 KB paging only; 4 PTs == 8 MB, the maximum)
+	  0x8000            guest image, then .bss, then the stack growing down from mem_size
+
+	[0, mem_size) is identity mapped, so GVA == GPA and translating a guest
+	pointer in phases B and C is v->mem + gva plus a bounds check.
+*/
+#define PML4_ADDR 0x1000
+#define PDPT_ADDR 0x2000
+#define PD_ADDR   0x3000
+#define PT_BASE   0x4000
+
+/* Room reserved above the image for .bss and the descending stack. */
+#define GUEST_MIN_SLACK 0x10000
+
+#define PAGE_4K   0x1000
+#define PAGE_2M   0x200000
+#define PTES_PER_TABLE 512
 
 #define IRQ_NUM   32
 #define IRQ_COUNT 3
@@ -54,7 +78,9 @@ int  vm_setup(struct vm *v, const struct vm_config *cfg);
 int  vm_run(struct vm *v);
 void vm_destroy(struct vm *v);
 
-void setup_long_mode(struct vm *v, struct kvm_sregs *sregs);
+void setup_paging_4k(struct vm *v);
+void setup_paging_2m(struct vm *v);
+int  setup_long_mode(struct vm *v, struct kvm_sregs *sregs);
 int  load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr);
 int  inject_irq(struct vm *v, unsigned int vector);
 
