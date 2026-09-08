@@ -1,8 +1,13 @@
 #include "descriptors.h"
 #include "interrupts.h"
+#include "guest.h"
 #include "io.h"
 
+#define MB2 0x200000ull
+
 static struct gdt_entry gdt[3];
+
+uint64_t guest_mem_top;
 
 /* Provided by guest.ld; delimit the NOBITS .bss region. */
 extern char __bss_start[], __bss_end[];
@@ -13,16 +18,28 @@ __attribute__((section(".start")))
 _start(void)
 {
 	struct dt_ptr p;
+	uint64_t sp;
 	char *b;
 
 	/*
-		.bss is NOBITS, so it is not part of the flat image the hypervisor loads.
-		It currently reads as zero only because host-side guest memory comes from
-		mmap(MAP_ANONYMOUS); zero it here so correctness does not depend on that.
-		Must be the first statement: gdt and idt both live in .bss.
+		The hypervisor sets rsp to mem_size before the first instruction, so
+		the initial stack pointer is the top of guest memory. Read it before
+		anything else can push, then round up to the next 2 MB boundary to
+		undo whatever prologue GCC emitted - mem_size is always a multiple
+		of 2 MB, so this recovers it exactly.
+	*/
+	asm volatile("movq %%rsp, %0" : "=r"(sp));
+
+	/*
+		.bss is NOBITS, so it is not part of the flat image the hypervisor
+		loads. It currently reads as zero only because host-side guest memory
+		comes from mmap(MAP_ANONYMOUS); zero it here so correctness does not
+		depend on that. Must come before gdt and idt, which both live in .bss.
 	*/
 	for (b = __bss_start; b != __bss_end; ++b)
 		*b = 0;
+
+	guest_mem_top = (sp + MB2 - 1) & ~(MB2 - 1);
 
 	gdt[0] = (struct gdt_entry){ 0 };
 	gdt[1] = (struct gdt_entry){  /* 64-bit code, selector 0x08: P=1, DPL=0, S=1, type=0xA, L=1, G=1 */
@@ -63,9 +80,7 @@ _start(void)
 
 	asm volatile("sti");
 
-	const char *s;
-	for (s = "Hello, world!\n"; *s; ++s)
-		outb(0xE9, *s);
+	guest_main();
 
 	for (;;)
 		asm volatile("hlt");

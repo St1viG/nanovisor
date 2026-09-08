@@ -15,32 +15,42 @@ CFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone \
          -fno-builtin -fno-tree-loop-distribute-patterns \
          -O2 -Wall -Wextra -Iinc
 
-SRCS = $(wildcard src/*.c)
-OBJS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SRCS))
-DEPS = $(OBJS:.o=.d)
+# lib/ is linked into every image; each tests/<name>.c becomes build/<name>.img.
+LIB_SRCS  = $(wildcard lib/*.c)
+LIB_OBJS  = $(patsubst lib/%.c,$(BUILD_DIR)/lib/%.o,$(LIB_SRCS))
+TEST_SRCS = $(wildcard tests/*.c)
+TEST_OBJS = $(patsubst tests/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRCS))
+IMGS      = $(patsubst tests/%.c,$(BUILD_DIR)/%.img,$(TEST_SRCS))
+ELFS      = $(patsubst tests/%.c,$(BUILD_DIR)/%.elf,$(TEST_SRCS))
+DEPS      = $(LIB_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 
-IMG = $(BUILD_DIR)/guest.img
-ELF = $(BUILD_DIR)/guest.elf
+.PHONY: all clean debug dirs
 
-.PHONY: all clean debug
+all: dirs $(IMGS) $(BUILD_DIR)/guest.img
 
-all: $(BUILD_DIR) $(IMG)
+dirs:
+	@mkdir -p $(BUILD_DIR)/lib $(BUILD_DIR)/tests
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/lib/%.o: lib/%.c | dirs
 	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-$(IMG): $(OBJS) guest.ld
-	$(LD) -T guest.ld $(OBJS) -o $@
+$(BUILD_DIR)/tests/%.o: tests/%.c | dirs
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-# Identical link emitted as ELF instead of a flat binary, so the section layout
-# can be inspected:  make debug && readelf -S build/guest.elf
-debug: $(BUILD_DIR) $(ELF)
+$(BUILD_DIR)/%.img: $(BUILD_DIR)/tests/%.o $(LIB_OBJS) guest.ld
+	$(LD) -T guest.ld $< $(LIB_OBJS) -o $@
 
-$(ELF): $(OBJS) guest.ld
-	$(LD) -T guest.ld --oformat=elf64-x86-64 $(OBJS) -o $@
+# The spec names guest.img as the canonical guest binary; keep it pointing at
+# the baseline image so the phase 0 gate keeps working unchanged.
+$(BUILD_DIR)/guest.img: $(BUILD_DIR)/hello.img
+	cp $< $@
+
+# Same links emitted as ELF, so the layout can be checked:
+#   make debug && readelf -S build/hello.elf
+debug: dirs $(ELFS)
+
+$(BUILD_DIR)/%.elf: $(BUILD_DIR)/tests/%.o $(LIB_OBJS) guest.ld
+	$(LD) -T guest.ld --oformat=elf64-x86-64 $< $(LIB_OBJS) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
