@@ -141,7 +141,7 @@ original to the VM-local copy — disappear entirely. The offset lives in your s
 
 `vm_<id>/` is created at VM startup. Local names resolve inside it; shared names resolve to the CWD and
 open `O_RDONLY` until CoW materializes `vm_<id>/<name>`. Isolation falls out of the namespace rather than
-being enforced by scattered checks. The filename validator (`[A-Za-z][A-Za-z0-9.]*`) rejects `/` and `..`,
+being enforced by scattered checks. The filename validator (`[A-Za-z][A-Za-z0-9._]*`; `_` is an extension for the course's own test programs) rejects `/` and `..`,
 so path traversal is structurally impossible — say that out loud at defense.
 
 ### D5 — `hlt` means "idle, awaiting IRQ" while an interrupt session is live

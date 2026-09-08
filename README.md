@@ -133,7 +133,9 @@ The spec's flag values collide with POSIX — spec `O_RDWR` is 4 where POSIX say
 re-exports the unprefixed spec names for guest code only.
 
 Two decisions the spec leaves open: `O_RD|O_WR` is treated as `O_RDWR`, and
-`O_CREATE` with no access flag is refused rather than guessing a mode.
+`O_CREATE` with no access flag is refused rather than guessing a mode. One
+deliberate extension: `_` is accepted in file names beyond the spec's letters,
+digits and dot, because the course's own test programs use `b1_data.txt`.
 
 ## Shared buffer protocol (phase C)
 

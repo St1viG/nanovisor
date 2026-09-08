@@ -164,7 +164,7 @@ or `PHASE 0 GATE FAIL`.
 | Section | Image | Checks |
 |---|---|---|
 | 1. round trip | `file_basic.img` | open returns a descriptor, read returns what was written, content matches, `SEEK_END` reports the size, `vm_0/out.txt` matches on the host (5) |
-| 2. error matrix | `file_errors.img` | the guest labels each of its 17 probes `[ok]` or `[UNEXPECTED]`; zero unexpected, at least 16 probes (2) |
+| 2. error matrix | `file_errors.img` | the guest labels each of its 19 probes `[ok]` or `[UNEXPECTED]`; zero unexpected, at least 16 probes (2) |
 | 3. copy-on-write | `file_shared.img` + `file_shared2.img` with `-f shared.txt` | original untouched, one private copy per VM, copies differ, the patch landed at offset 7 (offset survived the fd swap), the second VM patched at its own offset, exactly two `cow:` lines (6) |
 | 4. isolation | `file_basic.img` twice, `file_errors.img` | same file name lands in separate `vm_N/` directories; `..` and `/` in names are refused (2) |
 | 5. two descriptors on one shared file | `cow_twice.img` | both descriptors' writes survive, original untouched (2) |
@@ -225,7 +225,7 @@ unattended. All three source `scripts/demo_lib.sh`, which only provides
 | `crash.img` | executes `ud2` with no handler: triple fault, `KVM_EXIT_SHUTDOWN` | A4, C5 |
 | `echo.img` | reads port 0xE9 until end of input, echoes each byte back | A5 |
 | `file_basic.img` | open, write, seek back, read, close on `out.txt` | B1, B4 |
-| `file_errors.img` | 17 calls that must fail, each printed with `[ok]` or `[UNEXPECTED]` | B2, B4 |
+| `file_errors.img` | 19 probes, most of which must fail, each printed with `[ok]` or `[UNEXPECTED]` | B2, B4 |
 | `file_shared.img` | reads the shared file, seeks to offset 7, writes `PATCHED` | B3 |
 | `file_shared2.img` | same, offset 0 and `SECOND`, so the two copies differ | B3 |
 | `cow_twice.img` | two descriptors on one shared file, both writing | B5 |

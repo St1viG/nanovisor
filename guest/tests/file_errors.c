@@ -21,11 +21,15 @@ void guest_main(void)
 	char buf[16];
 	int fd;
 
-	/* Name rules: must start with a letter, then letters, digits and dots. */
+	/* Name rules: must start with a letter, then letters, digits, dots and,
+	   as an extension for the course's own test programs, underscores. */
 	expect("open(1bad.txt)      name starts with a digit", open("1bad.txt", O_RDWR | O_CREATE), -1);
 	expect("open(a/b.txt)       name contains a slash   ", open("a/b.txt", O_RDWR | O_CREATE), -1);
 	expect("open(..)            traversal attempt       ", open("..", O_RD), -1);
-	expect("open(bad_name.txt)  underscore not allowed  ", open("bad_name.txt", O_RDWR | O_CREATE), -1);
+	expect("open(bad-name.txt)  dash not allowed        ", open("bad-name.txt", O_RDWR | O_CREATE), -1);
+	fd = open("ok_name.txt", O_RDWR | O_CREATE);
+	expect("open(ok_name.txt)   underscore accepted     ", fd, 0);
+	expect("close(ok_name.txt)  valid                   ", close(fd), 0);
 
 	/* Missing file without O_CREATE. */
 	expect("open(nope.txt, O_RD)   no such file         ", open("nope.txt", O_RD), -1);

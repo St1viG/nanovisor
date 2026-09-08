@@ -34,7 +34,8 @@ struct guest_file {
 /* Registry of files shared between VMs, from -f/--file. Read-only after setup. */
 void fileio_set_shared(char **paths, int n);
 
-/* Spec: a name is letters, digits and dots, and must start with a letter. */
+/* Spec: letters, digits and dots, starting with a letter. Underscore is
+   accepted as an extension; see is_valid_name. */
 int is_valid_name(const char *name);
 
 /* Creates vm_<id>/ ; called once per VM at startup. */

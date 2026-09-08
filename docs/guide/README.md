@@ -76,11 +76,9 @@ Two things to know before running them:
 - `a2_echo.c` calls `gdt_boot()` and `halt_forever()` without defining them. Link an
   extra object that provides both (an empty `gdt_boot`, and `halt_forever` as a
   `hlt` loop) and compile it with `-include` of a header declaring them.
-- `b1` and `b2` use file names with an underscore (`b1_data.txt`), which the spec's
-  naming rule and `is_valid_name` in `host/src/fileio.c` reject, so both fail at
-  their first `open`. Allowing `_` in that validator makes them pass; the error
-  matrix in `guest/tests/file_errors.c` then needs its "underscore not allowed"
-  case changed.
+- `b1` and `b2` name their files with an underscore (`b1_data.txt`), which the
+  spec's naming rule does not list. `is_valid_name` in `host/src/fileio.c` accepts
+  `_` as a deliberate extension for exactly this reason; say so if asked, and
+  note that `/` and `..` are still refused, so the isolation argument stands.
 
-Measured against this tree: A1, A2 and B3 pass as they are; B1 and B2 pass once
-underscores are allowed.
+Measured against this tree: all of them pass.
