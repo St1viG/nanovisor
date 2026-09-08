@@ -13,9 +13,9 @@ Implementation roadmap for the AOR2 KVM hypervisor project. The assignment itsel
 Update as you go.
 
 ```
-Engineering progress:  33 / 100
-Assignment points:     15 / 45
-Current phase:         B (File support)
+Engineering progress:  67 / 100
+Assignment points:     30 / 45
+Current phase:         C (Interrupt support)
 ```
 
 | Milestone | Engineering % | Points secured |
@@ -358,43 +358,53 @@ Covers `PROJECT_en.md` lines 62–128.
 
 ### Tasks
 
-- [ ] **B.1** — Shared ABI header: `struct hv_request`, op enum, `O_RD=1`/`O_WR=2`/`O_RDWR=4`/`O_CREATE=8`,
+- [x] **B.1** — Shared ABI header: `struct hv_request`, op enum, `O_RD=1`/`O_WR=2`/`O_RDWR=4`/`O_CREATE=8`,
       `SEEK_SET=1`/`SEEK_END=2`, `PORT_FILE 0x0278`; included verbatim by both sides with a
       `_Static_assert` on `sizeof` so a one-sided edit fails at compile time — **2 pts**
       · `common/hv_abi.h` (new)
       <br>The flag values are **not** POSIX. Translate them; never pass them through to `open(2)`.
-- [ ] **B.2** — Guest shim: `open`/`close`/`read`/`write`/`lseek` building `struct hv_request` on the
+      <br>**Constants are `HV_`-prefixed in the shared header.** The spec's `O_RDWR` is 4 where POSIX
+      says 2, and `SEEK_SET` is 1 where POSIX says 0, so the unprefixed names collide with the host's
+      `<fcntl.h>`/`<stdio.h>`. `guest/inc/syscall.h` re-exports the spec names for guest code only.
+- [x] **B.2** — Guest shim: `open`/`close`/`read`/`write`/`lseek` building `struct hv_request` on the
       stack, then `outl(PORT_FILE, addr)` + `inl(PORT_FILE)` — **4 pts**
       · `guest/lib/syscall.c`, `guest/inc/syscall.h` (new)
-- [ ] **B.3** — Host translation: `void *guest_ptr(struct vm *v, uint64_t gva, size_t len)` returning NULL
+- [x] **B.3** — Host translation: `void *guest_ptr(struct vm *v, uint64_t gva, size_t len)` returning NULL
       on `gva + len > mem_size` or on overflow — **2 pts** · `host/src/vm.c`
-- [ ] **B.4** — Host dispatcher: `int hv_file_request(struct vm *, uint32_t req_gpa)` decoding the op and
+- [x] **B.4** — Host dispatcher: `int hv_file_request(struct vm *, uint32_t req_gpa)` decoding the op and
       writing `req->ret`; wired into `vm_run`'s `KVM_EXIT_IO` case with a per-VM `last_ret` for the
       matching IN — **3 pts** · `host/inc/fileio.h`, `host/src/fileio.c` (new)
-- [ ] **B.5** — Per-VM fd table: `struct guest_file { char name[64]; int hostfd; long off; int flags;
+- [x] **B.5** — Per-VM fd table: `struct guest_file { char name[64]; int hostfd; long off; int flags;
       int shared; int cow; char host_path[256]; }`, `table[MAX_OPEN_FILES]`, `alloc_fd`/`get_file`/`free_fd`.
       The table is a `struct vm` member, so isolation is structural — **3 pts**
       · `host/inc/fileio.h`, `host/inc/vm.h`
       <br>Guest fds are virtual indices. A guest handing you an fd it never opened must get `-1`.
-- [ ] **B.6** — `int is_valid_name(const char *)`: first char `[A-Za-z]`, rest `[A-Za-z0-9.]`, non-empty,
+- [x] **B.6** — `int is_valid_name(const char *)`: first char `[A-Za-z]`, rest `[A-Za-z0-9.]`, non-empty,
       length-bounded — **1 pt** · `host/src/fileio.c`
-- [ ] **B.7** — `hv_open`: validate name → resolve shared registry, else `vm_<id>/<name>` → map custom
+- [x] **B.7** — `hv_open`: validate name → resolve shared registry, else `vm_<id>/<name>` → map custom
       flags to host `O_*` → `off = 0` → return fd or `-1`; `mkdir vm_<id>` at VM start — **4 pts**
       · `host/src/fileio.c`, `host/src/vm.c`
-      <br>Decide and document: `O_CREATE` without a write flag, and `O_RD|O_WR` vs `O_RDWR`.
-- [ ] **B.8** — `hv_read`/`hv_write`/`hv_lseek`/`hv_close` via `pread`/`pwrite` + `f->off` (D3);
+      <br>**Decided:** `O_RD|O_WR` is treated as `O_RDWR`; `O_CREATE` with no access flag is refused
+      rather than having the hypervisor guess an access mode for the guest.
+- [x] **B.8** — `hv_read`/`hv_write`/`hv_lseek`/`hv_close` via `pread`/`pwrite` + `f->off` (D3);
       `SEEK_END` ignores `offset` per spec; permission checks against the open flags; short reads returned
       honestly — **4 pts** · `host/src/fileio.c`
-- [ ] **B.9** — Shared-file registry from `-f`: global read-only list, name→path resolution *before* the
+- [x] **B.9** — Shared-file registry from `-f`: global read-only list, name→path resolution *before* the
       local directory, refuse `O_CREATE` on a shared name — **3 pts** · `host/src/opts.c`, `host/src/fileio.c`
-- [ ] **B.10** — Copy-on-write: `int cow_materialize(struct vm *, struct guest_file *)` — copy the shared
+- [x] **B.10** — Copy-on-write: `int cow_materialize(struct vm *, struct guest_file *)` — copy the shared
       original to `vm_<id>/<name>`, reopen RW, **preserve `f->off`**, set `cow = 1`. Called from `hv_write`
       only, idempotent; the original must be provably untouched — **4 pts** · `host/src/fileio.c`
-- [ ] **B.11** — Test images — **3 pts** · `guest/tests/file_basic.c`, `file_errors.c`, `file_shared.c`
-- [ ] **B.12** — Teardown: close all fds in `vm_destroy`; leave `vm_<id>/` on disk for inspection
+- [x] **B.11** — Test images — **3 pts** · `guest/tests/file_basic.c`, `file_errors.c`, `file_shared.c`,
+      `file_shared2.c`
+      <br>`file_shared2.c` patches different text at a different offset, so a two-VM run shows the
+      private copies differing from each other and not just from the original.
+- [x] **B.12** — Teardown: close all fds in `vm_destroy`; leave `vm_<id>/` on disk for inspection
       — **1 pt** · `host/src/vm.c`, `host/src/fileio.c`
+      <br>Landed with B.4–B.8; no separate commit.
 
 ### Verification — 3 demos
+
+Scripted end to end in `scripts/test_phase_b.sh` (15 checks). **Passing.**
 
 1. **Round trip.** `file_basic.c`: `open("out.txt", O_RDWR|O_CREATE)` → `write` → `lseek(fd, 0, SEEK_SET)`
    → `read` back → echo to `0xE9` → `close`. Confirm host-side with `cat vm_0/out.txt`.
