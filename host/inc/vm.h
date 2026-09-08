@@ -116,7 +116,7 @@ int  vm_setup(struct vm *v, const struct vm_config *cfg);
 int  vm_run(struct vm *v);
 void vm_destroy(struct vm *v);
 
-void setup_paging_4k(struct vm *v);
+int  setup_paging_4k(struct vm *v);
 void setup_paging_2m(struct vm *v);
 int  setup_long_mode(struct vm *v, struct kvm_sregs *sregs);
 int  load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr);

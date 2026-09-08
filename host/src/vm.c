@@ -141,7 +141,7 @@ static void setup_segments_64(struct kvm_sregs *sregs)
 	512 / 1024 / 2048 for 2 / 4 / 8 MB, i.e. 1 / 2 / 4 page tables, which is
 	exactly what fits in the reserved region below GUEST_START_ADDR.
 */
-void setup_paging_4k(struct vm *v)
+int setup_paging_4k(struct vm *v)
 {
 	const uint64_t flags = PDE64_PRESENT | PDE64_RW | PDE64_USER;
 	uint64_t *pml4 = (void *)(v->mem + PML4_ADDR);
@@ -150,6 +150,26 @@ void setup_paging_4k(struct vm *v)
 	size_t n_pages = v->mem_size / PAGE_4K;
 	size_t n_pts   = (n_pages + PTES_PER_TABLE - 1) / PTES_PER_TABLE;
 	size_t i, j;
+
+	/*
+		The page tables live below the guest, and 2/4/8 MB need 1/2/4 of them,
+		which fills the reserved region exactly. A larger --memory would need
+		more tables than fit, and they would be silently overwritten when the
+		image is loaded at GUEST_START_ADDR - the guest would then triple-fault
+		on the first touch of an address whose table was clobbered, which is
+		both nondeterministic and nowhere near the real cause. Refuse instead.
+
+		To actually support more memory with 4 KB pages, raise
+		GUEST_START_ADDR (and the origin in guest/guest.ld) to leave room.
+	*/
+	if (PT_BASE + n_pts * PAGE_4K > GUEST_START_ADDR) {
+		fprintf(stderr,
+			"error: %zu MB with 4 KB pages needs %zu page tables (%zu bytes), "
+			"but only %d bytes are reserved below the guest at 0x%x\n",
+			v->mem_size / (1024 * 1024), n_pts, n_pts * PAGE_4K,
+			GUEST_START_ADDR - PT_BASE, GUEST_START_ADDR);
+		return -1;
+	}
 
 	pml4[0] = flags | PDPT_ADDR;
 	pdpt[0] = flags | PD_ADDR;
@@ -163,6 +183,8 @@ void setup_paging_4k(struct vm *v)
 		for (j = 0; j < PTES_PER_TABLE; j++)
 			pt[j] = ((i * PTES_PER_TABLE + j) * PAGE_4K) | flags;
 	}
+
+	return 0;
 }
 
 /*
@@ -193,7 +215,8 @@ int setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
 
 	switch (v->cfg.page_size) {
 	case PAGE_SIZE_4K:
-		setup_paging_4k(v);
+		if (setup_paging_4k(v) < 0)
+			return -1;
 		break;
 	case PAGE_SIZE_2M:
 		setup_paging_2m(v);
