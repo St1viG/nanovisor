@@ -277,6 +277,91 @@ static int32_t hv_read(struct vm *v, int32_t fd, uint32_t buf_gva, uint32_t coun
 	return (int32_t)n;   /* a short read is reported honestly */
 }
 
+/*
+	Copy-on-write.
+
+	Copies the shared original into vm_<id>/<name>, reopens it read-write and
+	swaps it in. Called from hv_write only, on the first write, and idempotent
+	afterwards.
+
+	The subtle part is what is NOT done here: f->off is never touched. Because
+	all I/O goes through pread/pwrite against our own offset (design D3), a
+	guest that seeks to 500 and then writes still writes at 500 after the
+	underlying host fd has been replaced. Had the offset lived in the kernel's
+	file description, it would have reset here and the corruption would have
+	been silent.
+
+	The original is only ever read, so it is provably untouched.
+*/
+static int cow_materialize(struct vm *v, struct guest_file *f)
+{
+	char local[HOST_PATH_MAX];
+	char buf[8192];
+	int src = -1, dst = -1, rw = -1;
+	ssize_t n;
+
+	if (f->cow)
+		return 0;
+
+	if (snprintf(local, sizeof(local), "vm_%d/%s", v->id, f->name) >= (int)sizeof(local))
+		return -1;
+
+	src = open(f->host_path, O_RDONLY);
+	if (src < 0) {
+		out_printf(v->id, "cow: cannot read %s: %s\n", f->host_path, strerror(errno));
+		return -1;
+	}
+
+	dst = open(local, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (dst < 0) {
+		out_printf(v->id, "cow: cannot create %s: %s\n", local, strerror(errno));
+		close(src);
+		return -1;
+	}
+
+	while ((n = read(src, buf, sizeof(buf))) > 0) {
+		ssize_t written = 0;
+
+		while (written < n) {
+			ssize_t w = write(dst, buf + written, (size_t)(n - written));
+
+			if (w <= 0) {
+				out_printf(v->id, "cow: write to %s failed: %s\n", local, strerror(errno));
+				close(src);
+				close(dst);
+				return -1;
+			}
+			written += w;
+		}
+	}
+
+	if (n < 0) {
+		out_printf(v->id, "cow: read of %s failed: %s\n", f->host_path, strerror(errno));
+		close(src);
+		close(dst);
+		return -1;
+	}
+
+	close(src);
+	close(dst);
+
+	rw = open(local, O_RDWR);
+	if (rw < 0) {
+		out_printf(v->id, "cow: cannot reopen %s: %s\n", local, strerror(errno));
+		return -1;
+	}
+
+	close(f->hostfd);
+	f->hostfd = rw;
+	f->cow    = 1;
+	snprintf(f->host_path, sizeof(f->host_path), "%s", local);
+	/* f->off deliberately left alone. */
+
+	out_printf(v->id, "cow: %s is now private\n", f->name);
+
+	return 0;
+}
+
 static int32_t hv_write(struct vm *v, int32_t fd, uint32_t buf_gva, uint32_t count)
 {
 	struct guest_file *f = get_file(v, fd);
@@ -292,6 +377,10 @@ static int32_t hv_write(struct vm *v, int32_t fd, uint32_t buf_gva, uint32_t cou
 
 	if (count == 0)
 		return 0;
+
+	/* Spec: the copy is made on the first write to a shared file. */
+	if (f->shared && !f->cow && cow_materialize(v, f) < 0)
+		return -1;
 
 	n = pwrite(f->hostfd, buf, count, (off_t)f->off);
 	if (n < 0)
