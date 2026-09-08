@@ -33,6 +33,8 @@
 #define PAGE_2M   0x200000
 #define PTES_PER_TABLE 512
 
+#define SERIAL_PORT 0xE9
+
 #define IRQ_NUM   32
 #define IRQ_COUNT 3
 
@@ -83,5 +85,7 @@ void setup_paging_2m(struct vm *v);
 int  setup_long_mode(struct vm *v, struct kvm_sregs *sregs);
 int  load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr);
 int  inject_irq(struct vm *v, unsigned int vector);
+
+const char *kvm_exit_name(uint32_t reason);
 
 #endif /* VM_H */

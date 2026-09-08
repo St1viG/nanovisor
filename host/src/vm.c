@@ -206,6 +206,82 @@ int setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
 	return 0;
 }
 
+/*
+	Spec part A: "if a VM crashes or an unexpected VM exit occurs, execution of
+	that VM (that thread) must be terminated and the error code printed".
+	Printing the bare number is not useful at a defense, so map it.
+*/
+const char *kvm_exit_name(uint32_t reason)
+{
+	switch (reason) {
+	case KVM_EXIT_UNKNOWN:          return "KVM_EXIT_UNKNOWN";
+	case KVM_EXIT_EXCEPTION:        return "KVM_EXIT_EXCEPTION";
+	case KVM_EXIT_IO:               return "KVM_EXIT_IO";
+	case KVM_EXIT_HYPERCALL:        return "KVM_EXIT_HYPERCALL";
+	case KVM_EXIT_DEBUG:            return "KVM_EXIT_DEBUG";
+	case KVM_EXIT_HLT:              return "KVM_EXIT_HLT";
+	case KVM_EXIT_MMIO:             return "KVM_EXIT_MMIO";
+	case KVM_EXIT_IRQ_WINDOW_OPEN:  return "KVM_EXIT_IRQ_WINDOW_OPEN";
+	case KVM_EXIT_SHUTDOWN:         return "KVM_EXIT_SHUTDOWN";
+	case KVM_EXIT_FAIL_ENTRY:       return "KVM_EXIT_FAIL_ENTRY";
+	case KVM_EXIT_INTR:             return "KVM_EXIT_INTR";
+	case KVM_EXIT_SET_TPR:          return "KVM_EXIT_SET_TPR";
+	case KVM_EXIT_TPR_ACCESS:       return "KVM_EXIT_TPR_ACCESS";
+	case KVM_EXIT_NMI:              return "KVM_EXIT_NMI";
+	case KVM_EXIT_INTERNAL_ERROR:   return "KVM_EXIT_INTERNAL_ERROR";
+	case KVM_EXIT_SYSTEM_EVENT:     return "KVM_EXIT_SYSTEM_EVENT";
+	default:                        return "unknown exit reason";
+	}
+}
+
+/*
+	A triple fault surfaces as KVM_EXIT_SHUTDOWN with no further detail, so the
+	register state is the only clue about where the guest actually died.
+*/
+static void dump_vcpu(struct vm *v)
+{
+	struct kvm_regs regs;
+	struct kvm_sregs sregs;
+
+	if (ioctl(v->vcpu_fd, KVM_GET_REGS, &regs) == 0)
+		printf("[vm %d]   rip=0x%llx rsp=0x%llx rbp=0x%llx rax=0x%llx rflags=0x%llx\n",
+		       v->id, (unsigned long long)regs.rip, (unsigned long long)regs.rsp,
+		       (unsigned long long)regs.rbp, (unsigned long long)regs.rax,
+		       (unsigned long long)regs.rflags);
+	else
+		printf("[vm %d]   KVM_GET_REGS failed\n", v->id);
+
+	if (ioctl(v->vcpu_fd, KVM_GET_SREGS, &sregs) == 0)
+		printf("[vm %d]   cr0=0x%llx cr3=0x%llx cr4=0x%llx efer=0x%llx cs.sel=0x%x\n",
+		       v->id, (unsigned long long)sregs.cr0, (unsigned long long)sregs.cr3,
+		       (unsigned long long)sregs.cr4, (unsigned long long)sregs.efer,
+		       sregs.cs.selector);
+	else
+		printf("[vm %d]   KVM_GET_SREGS failed\n", v->id);
+}
+
+/* Reports an exit this hypervisor does not handle, and ends this VM only. */
+static void report_unexpected_exit(struct vm *v)
+{
+	uint32_t reason = v->run->exit_reason;
+
+	printf("[vm %d] unexpected exit: %s (%u)\n", v->id, kvm_exit_name(reason), reason);
+
+	switch (reason) {
+	case KVM_EXIT_FAIL_ENTRY:
+		printf("[vm %d]   hardware_entry_failure_reason=0x%llx\n", v->id,
+		       (unsigned long long)v->run->fail_entry.hardware_entry_failure_reason);
+		break;
+	case KVM_EXIT_INTERNAL_ERROR:
+		printf("[vm %d]   suberror=%u\n", v->id, v->run->internal.suberror);
+		break;
+	default:
+		break;
+	}
+
+	dump_vcpu(v);
+}
+
 int vm_setup(struct vm *v, const struct vm_config *cfg)
 {
 	struct kvm_sregs sregs;
@@ -249,25 +325,41 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 	not be run. Phase A.7 calls this from one thread per guest, so it must not
 	touch any state outside *v.
 */
+/*
+	Port 0xE9 is the spec's serial port (part A). Any other port is a guest bug
+	at this stage; phases B and C add 0x0278, 0x510 and 0x520 here.
+*/
+static int handle_io(struct vm *v)
+{
+	char *base = (char *)v->run;
+
+	if (v->run->io.port == SERIAL_PORT && v->run->io.direction == KVM_EXIT_IO_OUT) {
+		printf("%c", *(base + v->run->io.data_offset));
+		return 0;
+	}
+
+	printf("[vm %d] unhandled IO %s on port 0x%x (size %u)\n", v->id,
+	       v->run->io.direction == KVM_EXIT_IO_OUT ? "OUT" : "IN",
+	       v->run->io.port, v->run->io.size);
+
+	return -1;
+}
+
 int vm_run(struct vm *v)
 {
-	int stop = 0;
-
 	v->run->request_interrupt_window = (v->irq_pending > 0);
 
-	while (stop == 0) {
+	for (;;) {
 		if (ioctl(v->vcpu_fd, KVM_RUN, 0) == -1) {
-			printf("KVM_RUN failed\n");
+			perror("KVM_RUN");
 			return -1;
 		}
 
 		switch (v->run->exit_reason) {
 		case KVM_EXIT_IO:
-			if (v->run->io.direction == KVM_EXIT_IO_OUT && v->run->io.port == 0xE9) {
-				char *p = (char *)v->run;
-				printf("%c", *(p + v->run->io.data_offset));
-			}
-			continue;
+			if (handle_io(v) < 0)
+				return -1;
+			break;
 		case KVM_EXIT_IRQ_WINDOW_OPEN:
 			if (v->irq_pending > 0) {
 				if (inject_irq(v, IRQ_NUM) < 0)
@@ -276,22 +368,15 @@ int vm_run(struct vm *v)
 			} else {
 				v->run->request_interrupt_window = 0;
 			}
-			continue;
+			break;
 		case KVM_EXIT_HLT:
-			printf("KVM_EXIT_HLT\n");
-			stop = 1;
-			break;
-		case KVM_EXIT_SHUTDOWN:
-			printf("Shutdown\n");
-			stop = 1;
-			break;
+			printf("[vm %d] KVM_EXIT_HLT\n", v->id);
+			return 0;
 		default:
-			printf("Default - exit reason: %d\n", v->run->exit_reason);
-			break;
+			report_unexpected_exit(v);
+			return -1;
 		}
 	}
-
-	return 0;
 }
 
 int load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr)

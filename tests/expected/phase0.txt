@@ -2,4 +2,4 @@ IRQ0 received!
 IRQ0 received!
 IRQ0 received!
 Hello, world!
-KVM_EXIT_HLT
+[vm 0] KVM_EXIT_HLT
