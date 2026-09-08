@@ -1,5 +1,6 @@
 #include "vm.h"
 #include "output.h"
+#include "hv_abi.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -84,6 +85,8 @@ int vm_init(struct vm *v, const struct vm_config *cfg)
 
 void vm_destroy(struct vm *v)
 {
+	fileio_vm_destroy(v);
+
 	if (v->run && v->run != MAP_FAILED) {
 		munmap(v->run, (size_t)v->run_mmap_size);
 		v->run = MAP_FAILED;
@@ -317,6 +320,9 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 		return -1;
 	}
 
+	if (fileio_vm_init(v) < 0)
+		return -1;
+
 	v->irq_pending = IRQ_COUNT;
 
 	return 0;
@@ -349,6 +355,29 @@ static int handle_io(struct vm *v)
 
 		/* IN: hand the guest one byte of the hypervisor's stdin. */
 		*(unsigned char *)(base + v->run->io.data_offset) = in_byte();
+		return 0;
+	}
+
+	if (v->run->io.port == PORT_FILE) {
+		uint32_t *slot;
+
+		/*
+			Risk 10: data_offset is a byte offset into the kvm_run page, size is
+			the operand width and count is the string-op repeat count. Assert
+			loudly rather than mis-decode: the phase B ABI is 32 bits wide, once.
+		*/
+		if (v->run->io.size != 4 || v->run->io.count != 1) {
+			out_printf(v->id, "file port 0x%x used with size %u count %u, expected 4/1\n",
+				   PORT_FILE, v->run->io.size, v->run->io.count);
+			return -1;
+		}
+
+		slot = (uint32_t *)(base + v->run->io.data_offset);
+
+		if (v->run->io.direction == KVM_EXIT_IO_OUT)
+			return hv_file_request(v, *slot);   /* OUT carries the request address */
+
+		*slot = (uint32_t)v->last_ret;          /* IN collects the result */
 		return 0;
 	}
 

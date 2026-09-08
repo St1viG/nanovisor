@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <linux/kvm.h>
 
+#include "fileio.h"
+
 #define MEM_SIZE         (2u * 1024u * 1024u)
 #define GUEST_START_ADDR 0x8000
 
@@ -77,6 +79,11 @@ struct vm {
 	/* Per-VM line buffer; see output.h. */
 	char   outbuf[256];
 	size_t outlen;
+
+	/* Phase B: this VM's open files, and the result the next IN on
+	   PORT_FILE has to return. */
+	struct guest_file files[MAX_OPEN_FILES];
+	int32_t           last_ret;
 };
 
 int  vm_init(struct vm *v, const struct vm_config *cfg);
