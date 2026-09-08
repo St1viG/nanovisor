@@ -13,9 +13,9 @@ Implementation roadmap for the AOR2 KVM hypervisor project. The assignment itsel
 Update as you go.
 
 ```
-Engineering progress:  0 / 100
+Engineering progress:  8 / 100
 Assignment points:     0 / 45
-Current phase:         0 (Foundations)
+Current phase:         A (Basic hypervisor)
 ```
 
 | Milestone | Engineering % | Points secured |
@@ -242,37 +242,40 @@ A phase counts as complete only when its **verification commands pass**, not whe
 
 ### Tasks
 
-- [ ] **0.1** — `.gitignore`: `build/`, `*.o`, `*.d`, `*.img`, `vm_*/`, generated test data — **0.5 pts**
+- [x] **0.1** — `.gitignore`: `build/`, `*.o`, `*.d`, `*.img`, `vm_*/`, generated test data — **0.5 pts**
       · `.gitignore` (new)
-- [ ] **0.2** — Guest compiler flags: `-mno-red-zone -fno-stack-protector -mgeneral-regs-only -fno-pie
-      -no-pie -fno-asynchronous-unwind-tables -fcf-protection=none -O2 -Wall -Wextra -fno-builtin`;
+- [x] **0.2** — Guest compiler flags: `-mno-red-zone -fno-stack-protector -mgeneral-regs-only -fno-pie
+      -fno-asynchronous-unwind-tables -fcf-protection=none -O2 -Wall -Wextra -fno-builtin
+      -fno-tree-loop-distribute-patterns`;
       drop the now-redundant `target("general-regs-only")` attribute — **1.5 pts**
       · `guest/Makefile:19`, `guest/src/interrupts.c:11`
-- [ ] **0.3** — Linker script: `. = 0x8000;`, `*(.rodata*)`, `*(.data*)`, `__bss_start`/`__bss_end`,
+- [x] **0.3** — Linker script: `*(.rodata*)`, `*(.data*)`, `__bss_start`/`__bss_end`,
       `/DISCARD/ : { *(.eh_frame) *(.comment) *(.note*) }` — **1.5 pts** · `guest/guest.ld`
       <br>**Must land together with 0.2.** At `-O0` GCC emits `.rodata`; at `-O2` it emits
       `.rodata.str1.1`, which `*(.rodata)` does not match. Adding `-O2` alone orphans every string literal.
-- [ ] **0.4** — Zero `.bss` at the top of `_start` using the new symbols; stop relying on `MAP_ANONYMOUS`
+      <br>**`. = 0x8000;` deferred to A.4.** It cannot land in phase 0: `setup_long_mode` still maps GVA
+      `0..0xFFFF` → GPA `0x8000..0x17FFF` and `rip` is still `0`, so a guest linked at `0x8000` would
+      resolve to GPA `0x10000`, past the image. The origin flips together with the identity map.
+- [x] **0.4** — Zero `.bss` at the top of `_start` using the new symbols; stop relying on `MAP_ANONYMOUS`
       — **0.5 pts** · `guest/src/main.c`
-- [ ] **0.5** — Freestanding runtime: `inb`/`outb`/`inw`/`outw`/`inl`/`outl`, plus
+- [x] **0.5** — Freestanding runtime: `inb`/`outb`/`inw`/`outw`/`inl`/`outl`, plus
       `memset`/`memcpy`/`memmove`/`strlen` (GCC emits calls to these even under `-ffreestanding`)
       — **1.0 pts** · `guest/inc/io.h`, `guest/src/string.c` + `guest/inc/string.h` (new)
-- [ ] **0.6** — Host refactor: `struct vm_config { size_t mem_size; int page_size; const char *image; int id; }`,
+- [x] **0.6** — Host refactor: `struct vm_config { size_t mem_size; int page_size; const char *image; int id; }`,
       `vm_setup(struct vm *, const struct vm_config *)`, `int vm_run(struct vm *)`; move the dispatch loop
       out of `main` — **2.0 pts** · `host/inc/vm.h`, `host/src/vm.c`, `host/src/main.c`
-- [ ] **0.7** — Host Makefile: `-pthread` in CFLAGS (not just at link), `-g -O2`, `-D_GNU_SOURCE`
+- [x] **0.7** — Host Makefile: `-pthread` in CFLAGS (not just at link), `-g -O2`, `-D_GNU_SOURCE`
       — **0.5 pts** · `host/Makefile`
-- [ ] **0.8** — Regression gate — **0.5 pts**
+- [x] **0.8** — Regression gate — **0.5 pts**
 
 ### Verification
 
 ```sh
-make -C host && make -C guest
-./host/build/hypervisor guest/build/guest.img
+./scripts/regress.sh          # clean build of both trees, warning check, output diff
 ```
 
 Output must be **byte-identical** to the pre-refactor run: three `IRQ0 received!` lines, `Hello, world!`,
-`KVM_EXIT_HLT`. Diff it against a saved copy.
+`KVM_EXIT_HLT`. The reference copy is committed at `tests/expected/phase0.txt`. **Passing.**
 
 ---
 
@@ -294,7 +297,8 @@ Covers `PROJECT_en.md` lines 42–50 and the "Option validation" section.
       <br>Graded in *every* phase, not just A.
 - [ ] **A.3** — Parametric paging: replace `setup_long_mode` with `setup_paging_4k()` and
       `setup_paging_2m()`; identity-map `[0, mem_size)` per D1 — **5 pts** · `host/src/vm.c:128`, `host/inc/vm.h`
-- [ ] **A.4** — Relocate guest to `0x8000`: `rip = GUEST_START_ADDR`, `rsp = mem_size`; drop
+- [ ] **A.4** — Relocate guest to `0x8000`: add `. = 0x8000;` to `guest.ld` (deferred here from 0.3),
+      `rip = GUEST_START_ADDR`, `rsp = mem_size`; drop
       `GUEST_CODE_PAGES` and the `pt[511]` stack hack — **2 pts**
       · `host/src/vm.c`, `host/src/main.c:47-50`, `guest/guest.ld`
 - [ ] **A.5** — Port `0xE9` **IN**: host feeds a byte into `((char *)run) + run->io.data_offset`; guest
