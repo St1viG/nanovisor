@@ -5,13 +5,15 @@
 static struct idt_entry idt[IDT_ENTRIES];
 
 /*
-	"general-regs-only" sprečava GCC da emituje SSE instrukcije, koje su zabranjene unutar
-	__attribute__((interrupt)) handlera
+	SSE instrukcije su zabranjene unutar __attribute__((interrupt)) handlera; sprečava ih
+	-mgeneral-regs-only, koji se sada primenjuje na ceo guest (vidi guest/Makefile).
 */
-static void __attribute__((interrupt, target("general-regs-only")))
+static void __attribute__((interrupt))
 irq0_handler(struct interrupt_frame *frame)
 {
 	const char *s;
+
+	(void)frame;
 
 	for (s = "IRQ0 received!\n"; *s; ++s)
 		outb(0xE9, *s);
