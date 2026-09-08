@@ -1,6 +1,8 @@
 #include "vm.h"
+#include "output.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -244,20 +246,20 @@ static void dump_vcpu(struct vm *v)
 	struct kvm_sregs sregs;
 
 	if (ioctl(v->vcpu_fd, KVM_GET_REGS, &regs) == 0)
-		printf("[vm %d]   rip=0x%llx rsp=0x%llx rbp=0x%llx rax=0x%llx rflags=0x%llx\n",
-		       v->id, (unsigned long long)regs.rip, (unsigned long long)regs.rsp,
-		       (unsigned long long)regs.rbp, (unsigned long long)regs.rax,
-		       (unsigned long long)regs.rflags);
+		out_printf(v->id, "  rip=0x%llx rsp=0x%llx rbp=0x%llx rax=0x%llx rflags=0x%llx\n",
+			   (unsigned long long)regs.rip, (unsigned long long)regs.rsp,
+			   (unsigned long long)regs.rbp, (unsigned long long)regs.rax,
+			   (unsigned long long)regs.rflags);
 	else
-		printf("[vm %d]   KVM_GET_REGS failed\n", v->id);
+		out_printf(v->id, "  KVM_GET_REGS failed\n");
 
 	if (ioctl(v->vcpu_fd, KVM_GET_SREGS, &sregs) == 0)
-		printf("[vm %d]   cr0=0x%llx cr3=0x%llx cr4=0x%llx efer=0x%llx cs.sel=0x%x\n",
-		       v->id, (unsigned long long)sregs.cr0, (unsigned long long)sregs.cr3,
-		       (unsigned long long)sregs.cr4, (unsigned long long)sregs.efer,
-		       sregs.cs.selector);
+		out_printf(v->id, "  cr0=0x%llx cr3=0x%llx cr4=0x%llx efer=0x%llx cs.sel=0x%x\n",
+			   (unsigned long long)sregs.cr0, (unsigned long long)sregs.cr3,
+			   (unsigned long long)sregs.cr4, (unsigned long long)sregs.efer,
+			   sregs.cs.selector);
 	else
-		printf("[vm %d]   KVM_GET_SREGS failed\n", v->id);
+		out_printf(v->id, "  KVM_GET_SREGS failed\n");
 }
 
 /* Reports an exit this hypervisor does not handle, and ends this VM only. */
@@ -265,15 +267,15 @@ static void report_unexpected_exit(struct vm *v)
 {
 	uint32_t reason = v->run->exit_reason;
 
-	printf("[vm %d] unexpected exit: %s (%u)\n", v->id, kvm_exit_name(reason), reason);
+	out_printf(v->id, "unexpected exit: %s (%u)\n", kvm_exit_name(reason), reason);
 
 	switch (reason) {
 	case KVM_EXIT_FAIL_ENTRY:
-		printf("[vm %d]   hardware_entry_failure_reason=0x%llx\n", v->id,
-		       (unsigned long long)v->run->fail_entry.hardware_entry_failure_reason);
+		out_printf(v->id, "  hardware_entry_failure_reason=0x%llx\n",
+			   (unsigned long long)v->run->fail_entry.hardware_entry_failure_reason);
 		break;
 	case KVM_EXIT_INTERNAL_ERROR:
-		printf("[vm %d]   suberror=%u\n", v->id, v->run->internal.suberror);
+		out_printf(v->id, "  suberror=%u\n", v->run->internal.suberror);
 		break;
 	default:
 		break;
@@ -334,11 +336,11 @@ static int handle_io(struct vm *v)
 	char *base = (char *)v->run;
 
 	if (v->run->io.port == SERIAL_PORT && v->run->io.direction == KVM_EXIT_IO_OUT) {
-		printf("%c", *(base + v->run->io.data_offset));
+		out_char(v, *(base + v->run->io.data_offset));
 		return 0;
 	}
 
-	printf("[vm %d] unhandled IO %s on port 0x%x (size %u)\n", v->id,
+	out_printf(v->id, "unhandled IO %s on port 0x%x (size %u)\n",
 	       v->run->io.direction == KVM_EXIT_IO_OUT ? "OUT" : "IN",
 	       v->run->io.port, v->run->io.size);
 
@@ -351,14 +353,17 @@ int vm_run(struct vm *v)
 
 	for (;;) {
 		if (ioctl(v->vcpu_fd, KVM_RUN, 0) == -1) {
-			perror("KVM_RUN");
+			out_flush(v);
+			out_printf(v->id, "KVM_RUN failed: %s\n", strerror(errno));
 			return -1;
 		}
 
 		switch (v->run->exit_reason) {
 		case KVM_EXIT_IO:
-			if (handle_io(v) < 0)
+			if (handle_io(v) < 0) {
+				out_flush(v);
 				return -1;
+			}
 			break;
 		case KVM_EXIT_IRQ_WINDOW_OPEN:
 			if (v->irq_pending > 0) {
@@ -370,9 +375,11 @@ int vm_run(struct vm *v)
 			}
 			break;
 		case KVM_EXIT_HLT:
-			printf("[vm %d] KVM_EXIT_HLT\n", v->id);
+			out_flush(v);
+			out_printf(v->id, "KVM_EXIT_HLT\n");
 			return 0;
 		default:
+			out_flush(v);
 			report_unexpected_exit(v);
 			return -1;
 		}

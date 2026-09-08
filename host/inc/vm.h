@@ -73,6 +73,10 @@ struct vm {
 	int id;
 	struct vm_config cfg;
 	int irq_pending;
+
+	/* Per-VM line buffer; see output.h. */
+	char   outbuf[256];
+	size_t outlen;
 };
 
 int  vm_init(struct vm *v, const struct vm_config *cfg);

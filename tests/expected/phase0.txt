@@ -1,5 +1,5 @@
-IRQ0 received!
-IRQ0 received!
-IRQ0 received!
-Hello, world!
+[vm 0] IRQ0 received!
+[vm 0] IRQ0 received!
+[vm 0] IRQ0 received!
+[vm 0] Hello, world!
 [vm 0] KVM_EXIT_HLT
