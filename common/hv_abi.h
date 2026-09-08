@@ -4,6 +4,14 @@
 #include <stdint.h>
 
 /*
+	Phase A: the serial console and the vector of the injected interrupt. Both
+	sides used to hardcode these separately; a mismatch on the vector means the
+	guest's handler silently never runs, so they live here with the rest.
+*/
+#define PORT_SERIAL 0xE9
+#define IRQ_VECTOR  32
+
+/*
 	The guest/hypervisor file ABI (design D2), included verbatim by both sides.
 
 	One request crosses the boundary as two vmexits on port 0x0278:

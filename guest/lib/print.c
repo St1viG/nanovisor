@@ -1,16 +1,15 @@
 #include "print.h"
 #include "io.h"
-
-#define SERIAL_PORT 0xE9
+#include "hv_abi.h"
 
 void putch(char c)
 {
-	outb(SERIAL_PORT, (uint8_t)c);
+	outb(PORT_SERIAL, (uint8_t)c);
 }
 
 char getch(void)
 {
-	return (char)inb(SERIAL_PORT);
+	return (char)inb(PORT_SERIAL);
 }
 
 void print(const char *s)

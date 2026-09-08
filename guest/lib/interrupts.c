@@ -2,6 +2,7 @@
 #include "interrupts.h"
 #include "irqproto.h"
 #include "io.h"
+#include "hv_abi.h"
 
 static struct idt_entry idt[IDT_ENTRIES];
 
@@ -27,7 +28,7 @@ irq32_handler(struct interrupt_frame *frame)
 		const char *s;
 
 		for (s = "IRQ0 received!\n"; *s; ++s)
-			outb(0xE9, *s);
+			outb(PORT_SERIAL, *s);
 		return;
 	}
 
@@ -62,7 +63,7 @@ void init_idt(void)
 {
 	struct dt_ptr p;
 
-	set_idt_gate(32, irq32_handler);
+	set_idt_gate(IRQ_VECTOR, irq32_handler);
 
 	p.limit = sizeof(idt) - 1;
 	p.base  = (uint64_t)(uintptr_t)idt;

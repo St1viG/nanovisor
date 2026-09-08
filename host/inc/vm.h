@@ -7,7 +7,6 @@
 
 #include "fileio.h"
 
-#define MEM_SIZE         (2u * 1024u * 1024u)
 #define GUEST_START_ADDR 0x8000
 
 /*
@@ -35,8 +34,6 @@
 #define PAGE_2M   0x200000
 #define PTES_PER_TABLE 512
 
-#define SERIAL_PORT 0xE9
-
 /* Phase C roles. */
 enum vm_role {
 	ROLE_NONE = 0,
@@ -50,7 +47,6 @@ enum stream_state {
 	STREAM_ACTIVE,
 };
 
-#define IRQ_NUM   32
 #define IRQ_COUNT 3
 
 #define PAGE_SIZE_4K 4      /* --page values, in KB */

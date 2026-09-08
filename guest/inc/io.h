@@ -48,4 +48,24 @@ static inline uint32_t inl(uint16_t port)
 	return value;
 }
 
+/*
+	CPU control. hlt is how a guest finishes (spec part A) and, while a phase C
+	session is live, how it idles until the next injected interrupt (design
+	D5). cli/sti bracket a section that must not be interrupted.
+*/
+static inline void cli(void)
+{
+	asm volatile("cli" ::: "memory");
+}
+
+static inline void sti(void)
+{
+	asm volatile("sti" ::: "memory");
+}
+
+static inline void hlt(void)
+{
+	asm volatile("hlt" ::: "memory");
+}
+
 #endif /* IO_H */

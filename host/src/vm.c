@@ -370,14 +370,21 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 }
 
 /*
-	The vCPU dispatch loop. Returns 0 once the guest halts, -1 if the VM could
-	not be run. Phase A.7 calls this from one thread per guest, so it must not
-	touch any state outside *v.
+	The operand of a port access lives in the kvm_run page at io.data_offset.
+	io.size is its width and io.count the string-instruction repeat count, so
+	every handler asserts both before touching the slot (roadmap risk 10) and
+	then reads or writes it through one of these rather than an ad hoc cast.
 */
-/*
-	Port 0xE9 is the spec's serial port (part A). Any other port is a guest bug
-	at this stage; phases B and C add 0x0278, 0x510 and 0x520 here.
-*/
+static inline uint8_t *io_u8(struct vm *v)
+{
+	return (uint8_t *)((char *)v->run + v->run->io.data_offset);
+}
+
+static inline uint32_t *io_u32(struct vm *v)
+{
+	return (uint32_t *)((char *)v->run + v->run->io.data_offset);
+}
+
 /*
 	Port 0x510. The spec overloads it three ways and the operand width plus the
 	VM's role is what tells them apart:
@@ -392,7 +399,7 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 	the buffer (or the reverse) is a reported error rather than silent
 	corruption of somebody else's round.
 */
-static int handle_buf_port(struct vm *v, char *base)
+static int handle_buf_port(struct vm *v)
 {
 	int is_in = (v->run->io.direction == KVM_EXIT_IO_IN);
 	uint32_t size = v->run->io.size;
@@ -405,8 +412,7 @@ static int handle_buf_port(struct vm *v, char *base)
 
 	/* The very first read is the mode assignment, whatever the role. */
 	if (is_in && size == 1 && !v->mode_sent) {
-		*(uint8_t *)(base + v->run->io.data_offset) =
-			(v->role == ROLE_WRITER) ? HV_MODE_WRITE : HV_MODE_READ;
+		*io_u8(v) = (v->role == ROLE_WRITER) ? HV_MODE_WRITE : HV_MODE_READ;
 		v->mode_sent = 1;
 		return 0;
 	}
@@ -418,7 +424,7 @@ static int handle_buf_port(struct vm *v, char *base)
 		}
 
 		if (size == 4) {
-			sb_writer_begin(v, *(uint32_t *)(base + v->run->io.data_offset));
+			sb_writer_begin(v, *io_u32(v));
 			return 0;
 		}
 
@@ -427,7 +433,7 @@ static int handle_buf_port(struct vm *v, char *base)
 				out_printf(v->id, "writer sent a byte before its count\n");
 				return -1;
 			}
-			sb_writer_byte(v, *(uint8_t *)(base + v->run->io.data_offset));
+			sb_writer_byte(v, *io_u8(v));
 			return 0;
 		}
 	} else {
@@ -437,7 +443,7 @@ static int handle_buf_port(struct vm *v, char *base)
 		}
 
 		if (size == 4) {
-			*(uint32_t *)(base + v->run->io.data_offset) = sb_reader_count(v);
+			*io_u32(v) = sb_reader_count(v);
 			return 0;
 		}
 
@@ -446,7 +452,7 @@ static int handle_buf_port(struct vm *v, char *base)
 				out_printf(v->id, "reader took a byte before its count\n");
 				return -1;
 			}
-			*(uint8_t *)(base + v->run->io.data_offset) = sb_reader_byte(v);
+			*io_u8(v) = sb_reader_byte(v);
 			return 0;
 		}
 	}
@@ -461,7 +467,7 @@ static int handle_buf_port(struct vm *v, char *base)
 	beyond BUFFER_SIZE is discarded); a reader reports how many it read, and is
 	stopped if that is short of the round.
 */
-static int handle_ack_port(struct vm *v, char *base)
+static int handle_ack_port(struct vm *v)
 {
 	if (v->run->io.size != 4 || v->run->io.count != 1) {
 		out_printf(v->id, "port 0x%x used with size %u count %u, expected 4/1\n",
@@ -485,7 +491,7 @@ static int handle_ack_port(struct vm *v, char *base)
 			return -1;
 		}
 
-		*(uint32_t *)(base + v->run->io.data_offset) = (uint32_t)sb_writer_publish(v);
+		*io_u32(v) = (uint32_t)sb_writer_publish(v);
 		return 0;
 	}
 
@@ -494,7 +500,7 @@ static int handle_ack_port(struct vm *v, char *base)
 		return -1;
 	}
 
-	if (sb_reader_ack(v, *(uint32_t *)(base + v->run->io.data_offset)) < 0) {
+	if (sb_reader_ack(v, *io_u32(v)) < 0) {
 		out_printf(v->id, "read fewer bytes than the round carried; stopping this VM\n");
 		return -1;
 	}
@@ -502,24 +508,26 @@ static int handle_ack_port(struct vm *v, char *base)
 	return 0;
 }
 
+/*
+	Port 0xE9 is the spec's serial port (part A); phases B and C add 0x0278,
+	0x510 and 0x520. Any other port is a guest bug and stops the VM.
+*/
 static int handle_io(struct vm *v)
 {
-	char *base = (char *)v->run;
-
-	if (v->run->io.port == SERIAL_PORT) {
-		if (v->run->io.size != 1) {
-			out_printf(v->id, "serial port 0x%x used with size %u, expected 1\n",
-				   SERIAL_PORT, v->run->io.size);
+	if (v->run->io.port == PORT_SERIAL) {
+		if (v->run->io.size != 1 || v->run->io.count != 1) {
+			out_printf(v->id, "serial port 0x%x used with size %u count %u, expected 1/1\n",
+				   PORT_SERIAL, v->run->io.size, v->run->io.count);
 			return -1;
 		}
 
 		if (v->run->io.direction == KVM_EXIT_IO_OUT) {
-			out_char(v, *(base + v->run->io.data_offset));
+			out_char(v, (char)*io_u8(v));
 			return 0;
 		}
 
 		/* IN: hand the guest one byte of the hypervisor's stdin. */
-		*(unsigned char *)(base + v->run->io.data_offset) = in_byte();
+		*io_u8(v) = in_byte();
 		return 0;
 	}
 
@@ -537,7 +545,7 @@ static int handle_io(struct vm *v)
 			return -1;
 		}
 
-		slot = (uint32_t *)(base + v->run->io.data_offset);
+		slot = io_u32(v);
 
 		if (v->run->io.direction == KVM_EXIT_IO_OUT)
 			return hv_file_request(v, *slot);   /* OUT carries the request address */
@@ -547,10 +555,10 @@ static int handle_io(struct vm *v)
 	}
 
 	if (v->irq_session_active && v->run->io.port == PORT_BUF)
-		return handle_buf_port(v, base);
+		return handle_buf_port(v);
 
 	if (v->irq_session_active && v->run->io.port == PORT_ACK)
-		return handle_ack_port(v, base);
+		return handle_ack_port(v);
 
 	out_printf(v->id, "unhandled IO %s on port 0x%x (size %u)\n",
 	       v->run->io.direction == KVM_EXIT_IO_OUT ? "OUT" : "IN",
@@ -559,6 +567,11 @@ static int handle_io(struct vm *v)
 	return -1;
 }
 
+/*
+	The vCPU dispatch loop. Returns 0 once the guest halts, -1 if the VM could
+	not be run. Phase A.7 calls this from one thread per guest, so it must not
+	touch any state outside *v.
+*/
 int vm_run(struct vm *v)
 {
 	v->run->request_interrupt_window = (v->irq_pending > 0);
@@ -579,7 +592,7 @@ int vm_run(struct vm *v)
 			break;
 		case KVM_EXIT_IRQ_WINDOW_OPEN:
 			if (v->irq_pending > 0) {
-				if (inject_irq(v, IRQ_NUM) < 0)
+				if (inject_irq(v, IRQ_VECTOR) < 0)
 					return -1;
 				v->irq_pending--;
 			} else {

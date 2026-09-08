@@ -1,4 +1,5 @@
 #include "opts.h"
+#include "vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +8,7 @@
 #include <getopt.h>
 
 #define DEFAULT_MEM_MB  2
-#define DEFAULT_PAGE_KB 4
+#define DEFAULT_PAGE_KB PAGE_SIZE_4K
 
 void usage(const char *prog)
 {
@@ -85,12 +86,12 @@ static int parse_memory(const char *s, int *out)
 static int parse_page(const char *s, int *out)
 {
 	if (!strcasecmp(s, "4") || !strcasecmp(s, "4k") || !strcasecmp(s, "4kb")) {
-		*out = 4;
+		*out = PAGE_SIZE_4K;
 		return 0;
 	}
 
 	if (!strcasecmp(s, "2") || !strcasecmp(s, "2m") || !strcasecmp(s, "2mb")) {
-		*out = 2048;
+		*out = PAGE_SIZE_2M;
 		return 0;
 	}
 

@@ -78,10 +78,10 @@ _start(void)
 
 	init_idt();
 
-	asm volatile("sti");
+	sti();
 
 	guest_main();
 
 	for (;;)
-		asm volatile("hlt");
+		hlt();
 }
