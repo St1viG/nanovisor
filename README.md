@@ -8,6 +8,7 @@ shared buffer driven by injected interrupts.
 The assignment is in [`docs/PROJECT_en.md`](docs/PROJECT_en.md); the
 implementation plan and its progress ledger are in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Every document and source file is mapped in [`docs/INDEX.md`](docs/INDEX.md).
 
 ## Build and run
 
