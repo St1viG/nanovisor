@@ -272,3 +272,21 @@ void sb_vm_gone(struct vm *v)
 	pthread_cond_broadcast(&buf.cv);
 	pthread_mutex_unlock(&buf.m);
 }
+
+void sb_vm_never_started(int role)
+{
+	pthread_mutex_lock(&buf.m);
+
+	if (role == ROLE_READER) {
+		if (buf.readers_total > 0)
+			buf.readers_total--;
+		/* Drops any obligation this VM was carrying for the current round. */
+		if (buf.readers_pending > buf.readers_total)
+			buf.readers_pending = buf.readers_total;
+	} else if (role == ROLE_WRITER) {
+		buf.over = 1;
+	}
+
+	pthread_cond_broadcast(&buf.cv);
+	pthread_mutex_unlock(&buf.m);
+}

@@ -56,4 +56,10 @@ int      sb_reader_ack(struct vm *v, uint32_t n_read);
 /* A VM is going away; keeps a dead reader from deadlocking the writer. */
 void sb_vm_gone(struct vm *v);
 
+/*
+	A VM that was counted at init but whose thread was never created. Same
+	obligation as sb_vm_gone, but there is no struct vm to consult.
+*/
+void sb_vm_never_started(int role);
+
 #endif /* SHARED_BUF_H */

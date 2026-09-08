@@ -78,6 +78,19 @@ out="$(run -m 4 -p 2 -g $IMG/file_errors.img)"
 grep -q 'traversal attempt        -> -1' <<<"$out" \
 	&& ok "path traversal rejected by the name rules" || bad "traversal not rejected"
 
+echo
+echo "5. hostile guest input"
+rm -rf vm_0
+out="$(run -m 4 -p 2 -g $IMG/hostile.img)"
+grep -q 'survived' <<<"$out" \
+	&& ok "hypervisor survived every malformed request" || bad "hypervisor did not survive" "$out"
+# -1 arrives at the guest as 4294967295; all seven probes must be rejected.
+[ "$(grep -c ': 4294967295$' <<<"$out")" = 7 ] \
+	&& ok "all 7 out-of-range/malformed requests returned -1" \
+	|| bad "some malformed request was accepted" "$out"
+grep -q 'file request at out-of-range address' <<<"$out" \
+	&& ok "out-of-range request address reported" || bad "no report for a bad request address"
+
 rm -f shared.txt.orig
 
 echo

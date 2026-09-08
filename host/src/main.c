@@ -102,6 +102,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	/* Configure every VM first, so the roles are known even for any that
+	   fail to spawn below. */
 	for (i = 0; i < opts.n_guests; i++) {
 		args[i].vm  = &vms[i];
 		args[i].rc  = -1;
@@ -115,13 +117,25 @@ int main(int argc, char *argv[])
 					: ROLE_NONE,
 			.irq_session = opts.irq_session,
 		};
+	}
 
+	for (i = 0; i < opts.n_guests; i++) {
 		if (pthread_create(&tids[i], NULL, vm_thread, &args[i]) != 0) {
 			fprintf(stderr, "[vm %d] pthread_create failed\n", i);
 			failures++;
 			break;
 		}
 		spawned++;
+	}
+
+	/*
+		Anything past `spawned` never ran, but shared_buf counted it at init.
+		Retract those obligations before joining, or the writer blocks on
+		acknowledgements from threads that do not exist.
+	*/
+	if (opts.irq_session) {
+		for (i = spawned; i < opts.n_guests; i++)
+			sb_vm_never_started(args[i].cfg.role);
 	}
 
 	for (i = 0; i < spawned; i++) {

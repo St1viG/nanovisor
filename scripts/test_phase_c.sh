@@ -106,6 +106,36 @@ out="$(run -m 4 -p 2 -g $IMG/hello.img)"
 [ "$(grep -c 'IRQ0 received!' <<<"$out")" = 3 ] \
 	&& ok "without --irq the phase A interrupt behaviour is unchanged" || bad "phase A behaviour changed" "$out"
 
+echo
+echo "7. a reader that does not read the whole round is stopped"
+rm -rf vm_0 vm_1 vm_2
+python3 -c "open('input.txt','w').write('Z'*128)"
+out="$(run -m 4 -p 2 -i -g $IMG/irq_writer.img $IMG/irq_reader.img $IMG/irq_short.img -f input.txt)"
+grep -q 'read fewer bytes than the round carried' <<<"$out" \
+	&& ok "short reader stopped, as the spec requires" || bad "short reader not stopped" "$out"
+cmp -s input.txt vm_1/out.txt \
+	&& ok "the compliant reader was unaffected" || bad "compliant reader lost data"
+
+echo
+echo "8. a VM that never starts must not hang the session"
+# Both directions: shared_buf counts every VM at init, so one that dies before
+# vm_setup has to retract its obligation or the survivors wait for ever.
+start=$(date +%s)
+run -m 4 -p 2 -i -g $IMG/irq_writer.img /nonexistent.img >/dev/null 2>&1
+rc=$?
+elapsed=$(( $(date +%s) - start ))
+[ "$rc" -ne 124 ] && [ "$elapsed" -lt 8 ] \
+	&& ok "reader that fails to load does not hang the writer (${elapsed}s)" \
+	|| bad "hung when a reader failed to load (${elapsed}s)"
+
+start=$(date +%s)
+run -m 4 -p 2 -i -g /nonexistent.img $IMG/irq_reader.img >/dev/null 2>&1
+rc=$?
+elapsed=$(( $(date +%s) - start ))
+[ "$rc" -ne 124 ] && [ "$elapsed" -lt 8 ] \
+	&& ok "writer that fails to load does not hang the readers (${elapsed}s)" \
+	|| bad "hung when the writer failed to load (${elapsed}s)"
+
 rm -f input.txt small.txt
 rm -rf vm_0 vm_1 vm_2
 

@@ -27,6 +27,16 @@ int vm_init(struct vm *v, const struct vm_config *cfg)
 	v->id = cfg->id;
 	v->irq_pending = 0;
 
+	/*
+		Set here, not in vm_setup: every teardown path runs vm_destroy ->
+		sb_vm_gone, and that has to know this VM's role even when the VM died
+		before it was ever set up. A VM that fails to load its image is still
+		counted in readers_total, and if it leaves without saying so the writer
+		waits for an acknowledgement that can never come.
+	*/
+	v->role = (enum vm_role)cfg->role;
+	v->irq_session_active = cfg->irq_session;
+
 	v->kvm_fd = open("/dev/kvm", O_RDWR);
 	if (v->kvm_fd < 0) {
 		perror("open /dev/kvm");
@@ -348,9 +358,6 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 	if (fileio_vm_init(v) < 0)
 		return -1;
 
-	v->role = (enum vm_role)cfg->role;
-	v->irq_session_active = cfg->irq_session;
-
 	/*
 		In a session the first interrupt assigns the mode and every later one
 		is scheduled by the coordinator; outside one, keep the starter's three
@@ -466,6 +473,17 @@ static int handle_ack_port(struct vm *v, char *base)
 			out_printf(v->id, "writer wrote to port 0x%x\n", PORT_ACK);
 			return -1;
 		}
+
+		/*
+			Publishing is only meaningful after a count has been sent on
+			0x510. Without this the stale stream_expected of 0 would be read
+			as the end-of-stream sentinel and silently kill the session.
+		*/
+		if (v->stream != STREAM_ACTIVE) {
+			out_printf(v->id, "writer read port 0x%x without sending a count\n", PORT_ACK);
+			return -1;
+		}
+
 		*(uint32_t *)(base + v->run->io.data_offset) = (uint32_t)sb_writer_publish(v);
 		return 0;
 	}
