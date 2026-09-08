@@ -4,12 +4,25 @@
 
 static struct gdt_entry gdt[3];
 
+/* Provided by guest.ld; delimit the NOBITS .bss region. */
+extern char __bss_start[], __bss_end[];
+
 void
 __attribute__((noreturn))
 __attribute__((section(".start")))
 _start(void)
 {
 	struct dt_ptr p;
+	char *b;
+
+	/*
+		.bss is NOBITS, so it is not part of the flat image the hypervisor loads.
+		It currently reads as zero only because host-side guest memory comes from
+		mmap(MAP_ANONYMOUS); zero it here so correctness does not depend on that.
+		Must be the first statement: gdt and idt both live in .bss.
+	*/
+	for (b = __bss_start; b != __bss_end; ++b)
+		*b = 0;
 
 	gdt[0] = (struct gdt_entry){ 0 };
 	gdt[1] = (struct gdt_entry){  /* 64-bit code, selector 0x08: P=1, DPL=0, S=1, type=0xA, L=1, G=1 */
