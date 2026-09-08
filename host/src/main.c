@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <pthread.h>
 
 /*
@@ -70,15 +71,42 @@ int main(int argc, char *argv[])
 	*/
 	for (i = 0; i < opts.n_files; i++) {
 		const char *base = strrchr(opts.files[i], '/');
+		struct stat st;
+		int j;
 
 		base = base ? base + 1 : opts.files[i];
 
-		if (!is_valid_name(base))
+		if (!is_valid_name(base)) {
 			fprintf(stderr, "warning: shared file '%s' has a name no guest can open\n",
 				opts.files[i]);
-		else if (access(opts.files[i], R_OK) != 0)
+		} else if (stat(opts.files[i], &st) != 0) {
+			fprintf(stderr, "warning: shared file '%s': %s\n",
+				opts.files[i], strerror(errno));
+		} else if (!S_ISREG(st.st_mode)) {
+			fprintf(stderr, "warning: shared file '%s' is not a regular file\n",
+				opts.files[i]);
+		} else if (access(opts.files[i], R_OK) != 0) {
 			fprintf(stderr, "warning: shared file '%s' is not readable: %s\n",
 				opts.files[i], strerror(errno));
+		}
+
+		/*
+			Guests open shared files by basename, so two -f paths sharing one
+			basename means the second is unreachable - silently, which is a
+			genuinely confusing thing to debug from inside a guest.
+		*/
+		for (j = 0; j < i; j++) {
+			const char *prev = strrchr(opts.files[j], '/');
+
+			prev = prev ? prev + 1 : opts.files[j];
+			if (!strcmp(prev, base)) {
+				fprintf(stderr,
+					"warning: shared files '%s' and '%s' have the same name; "
+					"guests can only reach the first\n",
+					opts.files[j], opts.files[i]);
+				break;
+			}
+		}
 	}
 
 	fileio_set_shared(opts.files, opts.n_files);

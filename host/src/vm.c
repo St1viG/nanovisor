@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 int vm_init(struct vm *v, const struct vm_config *cfg)
 {
@@ -615,25 +616,40 @@ int vm_run(struct vm *v)
 
 int load_guest_image(struct vm *v, const char *image_path, uint64_t load_addr)
 {
+	struct stat st;
+	long fsz;
+
 	FILE *f = fopen(image_path, "rb");
 	if (!f) {
 		perror("Failed to open guest image");
 		return -1;
 	}
 
-	if (fseek(f, 0, SEEK_END) < 0) {
-		perror("Failed to seek to end of guest image");
+	/*
+		Check what this actually is before trusting its size. ftell on a
+		directory reports LONG_MAX, which produced a nonsensical "does not fit"
+		message, and an empty file loaded fine and then triple-faulted on the
+		zeros at GUEST_START_ADDR - both diagnosing the wrong thing.
+	*/
+	if (fstat(fileno(f), &st) < 0) {
+		perror("Failed to stat guest image");
 		fclose(f);
 		return -1;
 	}
 
-	long fsz = ftell(f);
-	if (fsz < 0) {
-		perror("Failed to get size of guest image");
+	if (!S_ISREG(st.st_mode)) {
+		fprintf(stderr, "guest image %s is not a regular file\n", image_path);
 		fclose(f);
 		return -1;
 	}
-	rewind(f);
+
+	if (st.st_size == 0) {
+		fprintf(stderr, "guest image %s is empty\n", image_path);
+		fclose(f);
+		return -1;
+	}
+
+	fsz = (long)st.st_size;
 
 	/*
 		Risk 7: the image is only the start of what the guest occupies - .bss

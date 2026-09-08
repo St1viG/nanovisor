@@ -342,7 +342,7 @@ Scripted end to end in `scripts/test_phase_a.sh` (19 checks). **Passing.**
      ./host/build/hypervisor -m $m -p $p -g guest/build/mem_probe.img
    done; done
    ```
-3. **Option validation.** `-m 3` → `error: --memory must be 2, 4 or 8 (got 3)`, exit 1. `-p 8` likewise.
+3. **Option validation.** `-m 3` → `error: --memory must be 2, 4 or 8 (got '3')`, exit 1. `-p 8` likewise.
    `-g` with no files → error. Also covered: unknown option, missing argument, stray operand.
 4. **Fault isolation.**
    ```sh

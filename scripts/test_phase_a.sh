@@ -56,7 +56,7 @@ check_err() {
 		bad "$desc (rc=$rc)" "$(head -1 <<<"$out")"
 	fi
 }
-check_err "-m 3 rejected"          "--memory must be 2, 4 or 8 (got 3)"   -m 3 -g $IMG/hello.img
+check_err "-m 3 rejected"          "--memory must be 2, 4 or 8 (got '3')"   -m 3 -g $IMG/hello.img
 check_err "-p 8 rejected"          "--page must be 4 (4KB) or 2 (2MB)"    -p 8 -g $IMG/hello.img
 check_err "missing --guest"        "at least one guest image is required" -m 4
 check_err "unknown option"         "invalid option"                       -x

@@ -74,7 +74,7 @@ static int parse_memory(const char *s, int *out)
 	}
 
 	if (v != 2 && v != 4 && v != 8) {
-		fprintf(stderr, "error: --memory must be 2, 4 or 8 (got %ld)\n", v);
+		fprintf(stderr, "error: --memory must be 2, 4 or 8 (got '%s')\n", s);
 		return -1;
 	}
 
