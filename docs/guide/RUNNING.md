@@ -262,7 +262,7 @@ then halts. Phase C images opt into the protocol by defining
 
 ## 8. The examiners' base tests and the modifications
 
-The base test programs in `docs/m` are not part of `make test`; how to build and
+The base test programs in `docs/mods` are not part of `make test`; how to build and
 run them, and the two things to know first, are in [README.md](README.md). After
 implementing a modification, rerun `make test` and the checks on its page:
 [A-16MB.md](A-16MB.md), [B-SEEK_CUR-O_APPEND.md](B-SEEK_CUR-O_APPEND.md),

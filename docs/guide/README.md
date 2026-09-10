@@ -1,7 +1,7 @@
 # Defense modification guide
 
 The course publishes one official modification per phase in
-[`../m/AOR2_2026_Modifikacije.pdf`](../m/AOR2_2026_Modifikacije.pdf); you implement
+[`../mods/AOR2_2026_Modifikacije.pdf`](../mods/AOR2_2026_Modifikacije.pdf); you implement
 only the one for the phase you defend. Each page here gives the task, where it lives
 in this tree, the edits step by step, the exact solution as a patch, how to prove it
 works with captured output, and what to say when asked why.
@@ -55,8 +55,8 @@ examiner wants to watch you find the places. The step lists are written for that
 
 ## Before the modification: the official base tests
 
-`../m/A` and `../m/B` hold the examiners' guest programs for the unmodified project;
-`../m/C/test.txt` describes the phase C scenario, which is what `scripts/demo_c.sh`
+`../mods/A` and `../mods/B` hold the examiners' guest programs for the unmodified project;
+`../mods/C/test.txt` describes the phase C scenario, which is what `scripts/demo_c.sh`
 runs (with `-i`, this project's own flag; say so before you type it). The programs
 define their own `_start` and expect `open`/`close`/`read`/`write`/`lseek` from your
 guest library, so they are linked without `lib/start.c`:
@@ -66,7 +66,7 @@ CFLAGS="-m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone -fno-stack-protector
   -mgeneral-regs-only -fno-asynchronous-unwind-tables -fcf-protection=none \
   -fno-builtin -fno-tree-loop-distribute-patterns -O2 -Iguest/inc -Icommon"
 make                                   # builds guest/build/lib/*.o
-gcc $CFLAGS -c -o /tmp/b1.o docs/m/B/b1_create_write_read.c
+gcc $CFLAGS -c -o /tmp/b1.o docs/mods/B/b1_create_write_read.c
 ld -T guest/guest.ld /tmp/b1.o guest/build/lib/syscall.o guest/build/lib/string.o -o /tmp/b1.img
 ./host/build/hypervisor -m 2 -p 4 -g /tmp/b1.img
 ```

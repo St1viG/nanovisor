@@ -27,15 +27,15 @@ the tables to jump.
 | [`docs/AOR2_2026_Projekat.pdf`](AOR2_2026_Projekat.pdf) | the assignment as published | the PDF itself is asked for |
 | [`docs/ROADMAP.md`](ROADMAP.md) | the implementation plan: progress ledger, baseline analysis of the starter, D1 to D7 with alternatives, task lists per phase with points, verification demos, risk register, dependency graph, commit convention | "why was it done this way", "what went wrong and how was it found", the task-ID commit prefixes |
 | [`docs/REHEARSAL.md`](REHEARSAL.md) | eight candidate live modifications, four carried out and measured, four as steps | practising a modification; the 16 MB trap and the `tell` syscall walk-through |
-| [`docs/guide/README.md`](guide/README.md) | index of the modification guide, the official sheet translated, how the pages were made, how to build and run the examiners' base tests | the night before, and when handed docs/m at the defense |
+| [`docs/guide/README.md`](guide/README.md) | index of the modification guide, the official sheet translated, how the pages were made, how to build and run the examiners' base tests | the night before, and when handed docs/mods at the defense |
 | [`docs/guide/RUNNING.md`](guide/RUNNING.md) | setup checks, build targets, running by hand, what each suite section checks, what each demo shows, the guest image table, reading failures | running anything, or explaining what a script does |
 | [`docs/guide/A-16MB.md`](guide/A-16MB.md) | modification A: 16 MB guests | defending phase A |
 | [`docs/guide/B-SEEK_CUR-O_APPEND.md`](guide/B-SEEK_CUR-O_APPEND.md) | modification B: `SEEK_CUR` and `O_APPEND` | defending phase B |
 | [`docs/guide/C-VECTOR33-STOP.md`](guide/C-VECTOR33-STOP.md) | modification C: vector 33 stop on `k` | defending phase C |
 | [`docs/guide/patches/`](guide/patches/) | `modA.diff`, `modB.diff`, `modC.diff`: the exact verified solutions | the answer key; `git apply --check` first |
-| [`docs/m/AOR2_2026_Modifikacije.pdf`](m/AOR2_2026_Modifikacije.pdf) | the official modification sheet (Cyrillic) | the source for the guide's translation |
-| [`docs/m/A/`](m/A/), [`docs/m/B/`](m/B/) | the examiners' guest programs for the unmodified project | running the base tests; see the guide README for the two caveats |
-| [`docs/m/C/test.txt`](m/C/test.txt) | the phase C scenario in one paragraph | it is what `scripts/demo_c.sh` step C3 runs |
+| [`docs/mods/AOR2_2026_Modifikacije.pdf`](mods/AOR2_2026_Modifikacije.pdf) | the official modification sheet (Cyrillic) | the source for the guide's translation |
+| [`docs/mods/A/`](mods/A/), [`docs/mods/B/`](mods/B/) | the examiners' guest programs for the unmodified project | running the base tests; see the guide README for the two caveats |
+| [`docs/mods/C/test.txt`](mods/C/test.txt) | the phase C scenario in one paragraph | it is what `scripts/demo_c.sh` step C3 runs |
 | [`tests/expected/phase0.txt`](../tests/expected/phase0.txt) | golden output for the phase 0 gate | `scripts/regress.sh` reports a diff |
 | `docs/INDEX.md` | this file | |
 
@@ -87,6 +87,7 @@ the tables to jump.
 | [`scripts/demo_a.sh`](../scripts/demo_a.sh), [`demo_b.sh`](../scripts/demo_b.sh), [`demo_c.sh`](../scripts/demo_c.sh) | the narrated defense demos, no assertions |
 | [`scripts/demo_lib.sh`](../scripts/demo_lib.sh) | helpers sourced by the demos |
 | [`.gitignore`](../.gitignore) | build output, `vm_*/`, generated test data, `scratch/`, `.DS_Store`, `skills-lock.json` |
+| [`.gitattributes`](../.gitattributes) | pins the examiners' CRLF files under `docs/mods` so `core.autocrlf` cannot rewrite them |
 
 ## Where to look when
 

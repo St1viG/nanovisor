@@ -1,0 +1,2 @@
+# The examiners' reference material is CRLF as published; never convert it.
+docs/mods/** -text
