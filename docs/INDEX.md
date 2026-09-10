@@ -3,6 +3,19 @@
 Paths are relative to the repository root. Start with the reading order, then use
 the tables to jump.
 
+## The tree
+
+```
+common/hv_abi.h        the guest/host ABI, included verbatim by both sides
+host/                  the hypervisor: inc/ and src/
+guest/                 inc/, lib/ (linked into every image), tests/ (one image
+                       per file), guest.ld
+scripts/               the four suites, the three demos, and expected/phase0.txt
+docs/                  the assignment, the roadmap, the defense material
+  guide/                 setup, running, one page per official modification
+  mods/                  the official modification sheet and the examiners' tests
+```
+
 ## Reading order for the defense
 
 1. [`README.md`](../README.md): what the hypervisor is, how to build and run it,
@@ -36,7 +49,7 @@ the tables to jump.
 | [`docs/mods/AOR2_2026_Modifikacije.pdf`](mods/AOR2_2026_Modifikacije.pdf) | the official modification sheet (Cyrillic) | the source for the guide's translation |
 | [`docs/mods/A/`](mods/A/), [`docs/mods/B/`](mods/B/) | the examiners' guest programs for the unmodified project | running the base tests; see the guide README for the two caveats |
 | [`docs/mods/C/test.txt`](mods/C/test.txt) | the phase C scenario in one paragraph | it is what `scripts/demo_c.sh` step C3 runs |
-| [`tests/expected/phase0.txt`](../tests/expected/phase0.txt) | golden output for the phase 0 gate | `scripts/regress.sh` reports a diff |
+| [`scripts/expected/phase0.txt`](../scripts/expected/phase0.txt) | golden output for the phase 0 gate, five lines | `scripts/regress.sh` reports a diff |
 | `docs/INDEX.md` | this file | |
 
 ## Source map
@@ -86,6 +99,7 @@ the tables to jump.
 | [`scripts/test_phase_c.sh`](../scripts/test_phase_c.sh) | phase C suite, 20 checks |
 | [`scripts/demo_a.sh`](../scripts/demo_a.sh), [`demo_b.sh`](../scripts/demo_b.sh), [`demo_c.sh`](../scripts/demo_c.sh) | the narrated defense demos, no assertions |
 | [`scripts/demo_lib.sh`](../scripts/demo_lib.sh) | helpers sourced by the demos |
+| [`scripts/expected/phase0.txt`](../scripts/expected/phase0.txt) | the golden output `regress.sh` diffs against; lives next to the script that reads it |
 | [`.gitignore`](../.gitignore) | build output, `vm_*/`, generated test data, `scratch/`, `.DS_Store`, `skills-lock.json` |
 | [`.gitattributes`](../.gitattributes) | pins the examiners' CRLF files under `docs/mods` so `core.autocrlf` cannot rewrite them |
 

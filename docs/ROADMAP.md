@@ -275,7 +275,7 @@ A phase counts as complete only when its **verification commands pass**, not whe
 ```
 
 Output must be **byte-identical** to the pre-refactor run: three `IRQ0 received!` lines, `Hello, world!`,
-`KVM_EXIT_HLT`. The reference copy is committed at `tests/expected/phase0.txt`. **Passing.**
+`KVM_EXIT_HLT`. The reference copy is committed at `scripts/expected/phase0.txt`. **Passing.**
 
 ---
 

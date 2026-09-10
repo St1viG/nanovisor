@@ -4,7 +4,7 @@
 #
 # Phase 0 is a pure refactor: compiler flags, linker script, .bss zeroing and
 # the vm_setup/vm_run split must not change one byte of what the program
-# prints. tests/expected/phase0.txt is the output captured from the original
+# prints. scripts/expected/phase0.txt is the output captured from the original
 # starter, before any of it was touched.
 #
 set -u
@@ -12,7 +12,7 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-EXPECTED="tests/expected/phase0.txt"
+EXPECTED="scripts/expected/phase0.txt"
 IMG="guest/build/guest.img"
 BIN="host/build/hypervisor"
 

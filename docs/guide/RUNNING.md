@@ -144,7 +144,7 @@ are limited to gitignored files in the root: `vm_0/`, `vm_1/`, `vm_2/`,
 
 Cleans and rebuilds both trees, fails if the build log contains a warning, runs
 `hypervisor -g guest/build/guest.img` under a 10-second timeout, and diffs the
-output against `tests/expected/phase0.txt`: three `IRQ0 received!` lines,
+output against `scripts/expected/phase0.txt`: three `IRQ0 received!` lines,
 `Hello, world!`, `KVM_EXIT_HLT`, each with the `[vm 0]` prefix. It proves the
 refactoring never changed what the starter printed. Prints `PHASE 0 GATE PASS`
 or `PHASE 0 GATE FAIL`.
