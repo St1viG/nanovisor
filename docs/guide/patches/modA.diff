@@ -1,8 +1,17 @@
 diff --git a/README.md b/README.md
-index e12e045..c325bee 100644
+index 5c0dbf9..6677744 100644
 --- a/README.md
 +++ b/README.md
-@@ -20,7 +20,7 @@ make clean
+@@ -150,7 +150,7 @@ flowchart LR
+     HSRC["host/src/*.c<br/>host/inc/*.h"]
+     GLIB["guest/lib/*.c<br/>start, interrupts, irqproto,<br/>syscall, print, string"]
+     GTEST["guest/tests/name.c<br/>provides guest_main()"]
+-    GLD["guest/guest.ld<br/>raw binary linked at 0x8000"]
++    GLD["guest/guest.ld<br/>raw binary linked at 0x10000"]
+ 
+     ABI --> BIN["host/build/hypervisor<br/>gcc -Wall -Wextra -O2 -pthread"]
+     HSRC --> BIN
+@@ -175,7 +175,7 @@ emits the same links as ELF (`guest/build/<name>.elf`) for `readelf -S`.
  ```
  usage: hypervisor -g <image> [image...] [options]
  
@@ -11,7 +20,7 @@ index e12e045..c325bee 100644
    -p, --page   <4|2>          page size, 4 for 4KB or 2 for 2MB (default 4)
    -g, --guest  <img> [img...] guest images; one VM is launched per image
    -f, --file   <f> [f...]     files shared between VMs
-@@ -71,15 +71,15 @@ guest is reserved for hypervisor-owned structures:
+@@ -286,15 +286,15 @@ image is reserved for hypervisor-owned structures:
  0x002000  PDPT
  0x003000  PD
  0x004000  PT[0]  ┐  4 KB paging only. mem_size/4096 PTEs means
@@ -32,24 +41,24 @@ index e12e045..c325bee 100644
  entries. The guest recovers `mem_size` from its initial `rsp`, rounded up to the
  next 2 MB boundary — no extra port, nothing hardcoded.
  
-@@ -123,7 +123,7 @@ return (int)inl(PORT_FILE);
+@@ -356,7 +356,7 @@ sequenceDiagram
  
- Two vmexits per call. Pointer arguments (`path`, `buf`) are ordinary guest
- addresses inside the struct and are translated the same way, so nothing needs
--serializing. A 32-bit address suffices because `mem_size` never exceeds 8 MB;
-+serializing. A 32-bit address suffices because `mem_size` never exceeds 16 MB;
- the generalisation is two `outl`s.
+ Pointer arguments (`path`, `buf`) are ordinary guest addresses inside the struct
+ and are translated the same way, so nothing needs serializing. A 32-bit address
+-suffices because `mem_size` never exceeds 8 MB; the generalisation is two `outl`s.
++suffices because `mem_size` never exceeds 16 MB; the generalisation is two `outl`s.
  
- The spec's flag values collide with POSIX — spec `O_RDWR` is 4 where POSIX says
-@@ -168,7 +168,7 @@ multi-round path and the barrier.
+ The spec's flag values collide with POSIX — spec `O_RDWR` is 4 where POSIX says 2,
+ spec `SEEK_SET` is 1 where POSIX says 0 — so the shared header uses `HV_`-prefixed
+@@ -433,7 +433,7 @@ multi-round path and the barrier.
  
  Each of these had a real alternative; the alternative is the interesting half.
  
 -**D1 — Identity map, guest at `0x8000`, page tables below it.**
 +**D1 — Identity map, guest at `0x10000`, page tables below it.**
- `[0, mem_size)` is identity mapped, so `GVA == GPA` and translating a guest
- pointer is `v->mem + gva` plus a bounds check. *Alternative:* the
- `KVM_TRANSLATE` ioctl does GVA→GPA properly, but costs one ioctl per pointer
+ `[0, mem_size)` is identity mapped, so `GVA == GPA` and translating a guest pointer
+ is `v->mem + gva` plus a bounds check. *Alternative:* the `KVM_TRANSLATE` ioctl
+ does GVA→GPA properly, but costs one ioctl per pointer argument and still needs the
 diff --git a/common/hv_abi.h b/common/hv_abi.h
 index 42099dc..8bd010e 100644
 --- a/common/hv_abi.h

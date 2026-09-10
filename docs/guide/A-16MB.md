@@ -55,9 +55,10 @@ else is needed: `setup_paging_2m` sets `PDE64_PS` on 8 PD entries instead of 4.
    `for m in 2 4 8 16`, and the `check_err` line for `-m 3` quotes the new message
    `--memory must be 2, 4, 8 or 16 (got '3')`. `scripts/demo_a.sh`: same loop.
 
-5. **Docs that quote the numbers.** The usage line, memory map and D1 heading in
-   `README.md`; the "never exceeds 8 MB" remark in `common/hv_abi.h`. Guest
-   addresses still fit in 32 bits, so the file ABI is untouched.
+5. **Docs that quote the numbers.** The usage line, the memory map, the load
+   address in the build diagram and the D1 heading in `README.md`; the "never
+   exceeds 8 MB" remark in `common/hv_abi.h`. Guest addresses still fit in 32
+   bits, so the file ABI is untouched.
 
 ## Verify
 

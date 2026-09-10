@@ -18,8 +18,10 @@ docs/                  the assignment, the roadmap, the defense material
 
 ## Reading order for the defense
 
-1. [`README.md`](../README.md): what the hypervisor is, how to build and run it,
-   the memory map, the ports, the two protocols, design decisions D1 to D7.
+1. [`README.md`](../README.md): the assignment in brief with links to both the
+   Markdown and the PDF originals, setup and build, how to run it, the vCPU loop,
+   the memory map, the ports, both protocols, design decisions D1 to D7 — with a
+   Mermaid diagram for each moving part.
 2. [`docs/guide/RUNNING.md`](guide/RUNNING.md): setup checks, the build, every
    script and every guest image, how to read a failure.
 3. [`docs/REHEARSAL.md`](REHEARSAL.md): eight rehearsed live modifications with
@@ -34,7 +36,7 @@ docs/                  the assignment, the roadmap, the defense material
 
 | File | What it is | Open it when |
 |---|---|---|
-| [`README.md`](../README.md) | project overview: usage, layout, memory map, ports table, file ABI, shared-buffer protocol, D1 to D7, concurrency notes, testing | you need the shape of anything, or a design decision in one paragraph |
+| [`README.md`](../README.md) | project overview: the assignment in brief and where to read it in full, setup and build, usage, layout, the vCPU loop, memory map, ports table, file ABI, copy-on-write, shared-buffer protocol, D1 to D7, concurrency notes, testing. Seven Mermaid diagrams | you need the shape of anything, or a design decision in one paragraph |
 | [`docs/PROJECT_en.md`](PROJECT_en.md) | the assignment, translated | checking what the spec literally requires |
 | [`docs/PROJECT_sr.md`](PROJECT_sr.md) | the assignment, Serbian original | same, in the examiner's words |
 | [`docs/AOR2_2026_Projekat.pdf`](AOR2_2026_Projekat.pdf) | the assignment as published | the PDF itself is asked for |
@@ -45,7 +47,7 @@ docs/                  the assignment, the roadmap, the defense material
 | [`docs/guide/A-16MB.md`](guide/A-16MB.md) | modification A: 16 MB guests | defending phase A |
 | [`docs/guide/B-SEEK_CUR-O_APPEND.md`](guide/B-SEEK_CUR-O_APPEND.md) | modification B: `SEEK_CUR` and `O_APPEND` | defending phase B |
 | [`docs/guide/C-VECTOR33-STOP.md`](guide/C-VECTOR33-STOP.md) | modification C: vector 33 stop on `k` | defending phase C |
-| [`docs/guide/patches/`](guide/patches/) | `modA.diff`, `modB.diff`, `modC.diff`: the exact verified solutions | the answer key; `git apply --check` first |
+| [`docs/guide/patches/`](guide/patches/) | `modA.diff`, `modB.diff`, `modC.diff`: the exact verified solutions. `modA` also carries the `README.md` edits its own step 5 asks for | the answer key; `git apply --check` each one first |
 | [`docs/mods/AOR2_2026_Modifikacije.pdf`](mods/AOR2_2026_Modifikacije.pdf) | the official modification sheet (Cyrillic) | the source for the guide's translation |
 | [`docs/mods/A/`](mods/A/), [`docs/mods/B/`](mods/B/) | the examiners' guest programs for the unmodified project | running the base tests; see the guide README for the two caveats |
 | [`docs/mods/C/test.txt`](mods/C/test.txt) | the phase C scenario in one paragraph | it is what `scripts/demo_c.sh` step C3 runs |
@@ -107,6 +109,7 @@ docs/                  the assignment, the roadmap, the defense material
 
 | You want to | Open |
 |---|---|
+| get KVM working on this machine | [`README.md`](../README.md) "Setup", then [`guide/RUNNING.md`](guide/RUNNING.md) section 1 for the fix per row |
 | run the tests or a demo | [`guide/RUNNING.md`](guide/RUNNING.md) sections 4 and 5 |
 | add a command-line option | `host/inc/opts.h`, `host/src/opts.c`; `host/inc/vm.h` and `host/src/main.c` if the VM must see it; worked example: `-v` in [`REHEARSAL.md`](REHEARSAL.md) item 5 |
 | add a file syscall | `common/hv_abi.h`, `guest/inc/syscall.h`, `guest/lib/syscall.c`, `host/src/fileio.c`; [`REHEARSAL.md`](REHEARSAL.md) item 2 measures it at 17 lines |

@@ -24,10 +24,12 @@ Every modification was implemented on a copy of this tree, `make test` was run,
 the outputs quoted on each page were captured from those runs, and the resulting
 diff was saved under [`patches/`](patches/). The patches are against the tree as of
 2026-09-08 and rely on the readiness helpers (`io_u8`/`io_u32`, `PORT_SERIAL`,
-`IRQ_VECTOR` in `common/hv_abi.h`). Check that one still applies with:
+`IRQ_VECTOR` in `common/hv_abi.h`). `modA.diff` also carries the `README.md` edits
+its step 5 asks for, so it was re-cut on 2026-09-09 when the README was rewritten;
+its code hunks are unchanged. Check that all three still apply with:
 
 ```sh
-git apply --check docs/guide/patches/modA.diff
+for p in docs/guide/patches/*.diff; do git apply --check "$p" && echo "$p ok"; done
 ```
 
 Treat a patch as the answer key, not as the thing you type at the defense: the
