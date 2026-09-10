@@ -15,3 +15,7 @@ vm_*/
 *.txt.orig
 shared.txt
 input.txt
+
+# Editor and tooling droppings
+.DS_Store
+skills-lock.json

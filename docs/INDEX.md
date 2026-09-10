@@ -86,7 +86,7 @@ the tables to jump.
 | [`scripts/test_phase_c.sh`](../scripts/test_phase_c.sh) | phase C suite, 20 checks |
 | [`scripts/demo_a.sh`](../scripts/demo_a.sh), [`demo_b.sh`](../scripts/demo_b.sh), [`demo_c.sh`](../scripts/demo_c.sh) | the narrated defense demos, no assertions |
 | [`scripts/demo_lib.sh`](../scripts/demo_lib.sh) | helpers sourced by the demos |
-| [`.gitignore`](../.gitignore) | build output, `vm_*/`, generated test data, `scratch/` |
+| [`.gitignore`](../.gitignore) | build output, `vm_*/`, generated test data, `scratch/`, `.DS_Store`, `skills-lock.json` |
 
 ## Where to look when
 
