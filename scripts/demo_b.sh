@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase B defense demo: file round trip, error matrix, copy-on-write.
+# Phase B demo: file round trip, error matrix, copy-on-write.
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/demo_lib.sh"
 build

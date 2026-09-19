@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase A defense demo: multiple VMs, parametric paging, option validation,
+# Phase A demo: multiple VMs, parametric paging, option validation,
 # fault isolation, serial I/O.
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/demo_lib.sh"

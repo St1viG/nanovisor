@@ -250,7 +250,7 @@ int setup_long_mode(struct vm *v, struct kvm_sregs *sregs)
 /*
 	Spec part A: "if a VM crashes or an unexpected VM exit occurs, execution of
 	that VM (that thread) must be terminated and the error code printed".
-	Printing the bare number is not useful at a defense, so map it.
+	Printing the bare number is not useful to a reader, so map it.
 */
 const char *kvm_exit_name(uint32_t reason)
 {
@@ -372,7 +372,7 @@ int vm_setup(struct vm *v, const struct vm_config *cfg)
 /*
 	The operand of a port access lives in the kvm_run page at io.data_offset.
 	io.size is its width and io.count the string-instruction repeat count, so
-	every handler asserts both before touching the slot (roadmap risk 10) and
+	every handler asserts both before touching the slot and
 	then reads or writes it through one of these rather than an ad hoc cast.
 */
 static inline uint8_t *io_u8(struct vm *v)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Phase C verification: the three demos from docs/ROADMAP.md, plus the
+# Phase C verification: the three demos from the phase C plan, plus the
 # failure modes from the risk register.
 #
 set -u

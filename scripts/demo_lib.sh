@@ -1,4 +1,4 @@
-# Shared helpers for the defense demo scripts. Sourced, not executed.
+# Shared helpers for the demo scripts. Sourced, not executed.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1

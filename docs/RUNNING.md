@@ -24,12 +24,12 @@ nestedVirtualization=true
 ```
 
 and after editing it run `wsl --shutdown` from Windows, then reopen the shell.
-This machine has that set, `/dev/kvm` present, the user in `kvm`, and `kvm_amd`
-loaded; if the exam machine is different, the table above is the checklist.
+The tree was developed on such a setup: `/dev/kvm` present, the user in `kvm`,
+and `kvm_amd` loaded. On any other machine, the table above is the checklist.
 
 **Never** create an in-kernel irqchip when experimenting with KVM here
 (`KVM_CREATE_IRQCHIP`, `KVM_CREATE_PIT2`): the project injects interrupts with
-`KVM_INTERRUPT`, which fails once an irqchip exists (design D7 in `README.md`).
+`KVM_INTERRUPT`, which fails once an irqchip exists (design D7 in [`../README.md`](../README.md)).
 
 ## 2. Build
 
@@ -75,7 +75,7 @@ usage: hypervisor -g <image> [image...] [options]
 
 `-g` and `-f` take several operands in a row; the list ends at the next option.
 `-i`, `-w` and `-v` are this project's additions; the assignment's own examples
-have none of them, so say so before typing `-i` at the defense.
+use none of them.
 
 One example per phase:
 
@@ -190,7 +190,7 @@ Sections 5 and 8 assert on wall-clock time, and the barrier has a 5-second
 watchdog. On a heavily loaded machine these can fail with nothing wrong; rerun
 the suite before believing such a failure.
 
-## 5. The defense demos
+## 5. The demos
 
 ```sh
 make demo-a      # or ./scripts/demo_a.sh
@@ -198,9 +198,8 @@ make demo-b
 make demo-c
 ```
 
-These are the commands to type at the defense, narrated. They assert nothing:
-each step prints the command as you would type it, runs it, and prints its exit
-status. Between groups, `pause` waits for Enter when a terminal is attached and
+These are guided walkthroughs, narrated. They assert nothing: each step prints
+the command as you would type it, runs it, and prints its exit status. Between groups, `pause` waits for Enter when a terminal is attached and
 continues by itself when the output is piped, so `make demo-b | cat` runs a demo
 unattended. All three source `scripts/demo_lib.sh`, which only provides
 `heading`, `step`, `pause` and `build`.
@@ -260,10 +259,3 @@ then halts. Phase C images opt into the protocol by defining
 - Leftover `vm_*/` directories from a previous run never break a suite, since each
   section removes what it needs, but `make clean` gives a clean slate.
 
-## 8. The examiners' base tests and the modifications
-
-The base test programs in `docs/mods` are not part of `make test`; how to build and
-run them, and the two things to know first, are in [README.md](README.md). After
-implementing a modification, rerun `make test` and the checks on its page:
-[A-16MB.md](A-16MB.md), [B-SEEK_CUR-O_APPEND.md](B-SEEK_CUR-O_APPEND.md),
-[C-VECTOR33-STOP.md](C-VECTOR33-STOP.md).

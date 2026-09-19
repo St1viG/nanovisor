@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase C defense demo: mode assignment, the barrier, the full spec scenario.
+# Phase C demo: mode assignment, the barrier, the full spec scenario.
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/demo_lib.sh"
 build

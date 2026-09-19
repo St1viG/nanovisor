@@ -11,9 +11,8 @@ shared buffer driven by injected interrupts.
 | Document | Format | What it is |
 |---|---|---|
 | [`docs/PROJECT_en.md`](docs/PROJECT_en.md) | Markdown | the project description, translated to English — the readable one |
-| [`docs/PROJECT_sr.md`](docs/PROJECT_sr.md) | Markdown | the project description, Serbian original, in the examiner's words |
+| [`docs/PROJECT_sr.md`](docs/PROJECT_sr.md) | Markdown | the project description, Serbian original as published by the course |
 | [`docs/AOR2_2026_Projekat.pdf`](docs/AOR2_2026_Projekat.pdf) | PDF | the project description exactly as published by the course |
-| [`docs/mods/AOR2_2026_Modifikacije.pdf`](docs/mods/AOR2_2026_Modifikacije.pdf) | PDF | the official modification sheet, one modification per phase |
 
 <details>
 <summary><strong>The assignment in brief</strong> — three parts, 45 points (click to expand)</summary>
@@ -35,10 +34,6 @@ shared buffer driven by injected interrupts.
 > injected interrupt. The hypervisor drives every transfer by injecting interrupts
 > and enforces the barrier: the writer may not publish the next round until every
 > reader has consumed the current one.
-
-The three official modifications defended on top of this — 16 MB guests,
-`SEEK_CUR` and `O_APPEND`, and a vector-33 stop — are translated in full in
-[`docs/guide/README.md`](docs/guide/README.md).
 
 </details>
 
@@ -86,9 +81,6 @@ flowchart TB
 
 Every VM thread owns its `struct vm` and mutates nothing else; the three shared
 modules are the only crossing points, and only one of them ever blocks a thread.
-The implementation plan and its progress ledger are in
-[`docs/ROADMAP.md`](docs/ROADMAP.md); every document and source file is mapped in
-[`docs/INDEX.md`](docs/INDEX.md).
 
 ---
 
@@ -125,7 +117,7 @@ flowchart TD
 | coreutils | `command -v timeout cmp diff mktemp` | four paths |
 
 The full checklist, with a fix for every row, is
-[`docs/guide/RUNNING.md`](docs/guide/RUNNING.md) section 1.
+[`docs/RUNNING.md`](docs/RUNNING.md) section 1.
 
 > **Never** create an in-kernel irqchip here (`KVM_CREATE_IRQCHIP`,
 > `KVM_CREATE_PIT2`). This project injects interrupts with `KVM_INTERRUPT`, which
@@ -212,7 +204,7 @@ Every line of guest output carries a `[vm N]` prefix. `[vm N] KVM_EXIT_HLT` is a
 normal end; `[vm N] unexpected exit: ...` plus a register dump means that VM died
 and the others carried on. Each VM gets a `vm_<id>/` directory in the working
 directory for its local files, left on disk for inspection. What each message
-means is catalogued in [`docs/guide/RUNNING.md`](docs/guide/RUNNING.md) section 3.
+means is catalogued in [`docs/RUNNING.md`](docs/RUNNING.md) section 3.
 
 ---
 
@@ -228,11 +220,9 @@ guest/
                          syscall, print, string
   tests/                 one image per file: guest/build/<name>.img
   guest.ld               raw-binary link script
-scripts/               test suites and the defense demos
+scripts/               test suites and the narrated demos
   expected/phase0.txt    golden output for the phase 0 regression gate
-docs/                  the assignment, the roadmap, the defense material
-  guide/                 setup, running, and one page per official modification
-  mods/                  the official modification sheet and the examiners' tests
+docs/                  the assignment and the running guide
 ```
 
 ---
@@ -466,9 +456,6 @@ it elsewhere is what makes `KVM_INTERRUPT` fail later. Relatedly:
 `KVM_CREATE_IRQCHIP` and `KVM_CREATE_PIT2` are never called, because an in-kernel
 irqchip would make `KVM_INTERRUPT` fail.
 
-The longer form of each, with the rejected alternatives spelled out, is in
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
-
 ---
 
 ## Concurrency notes
@@ -494,7 +481,7 @@ make test                    # everything
 ./scripts/test_phase_a.sh    # 19 checks
 ./scripts/test_phase_b.sh    # 24 checks
 ./scripts/test_phase_c.sh    # 20 checks
-./scripts/demo_a.sh          # the defense demos, narrated
+./scripts/demo_a.sh          # narrated walkthrough, one per phase
 ```
 
 The phase 0 gate diffs against `scripts/expected/phase0.txt` and fails on any
@@ -511,9 +498,18 @@ machine they can fail with nothing actually wrong; rerun before believing it.
 
 | You want | Open |
 |---|---|
-| the full setup checklist, every script, every guest image | [`docs/guide/RUNNING.md`](docs/guide/RUNNING.md) |
-| a map of every file in the repo | [`docs/INDEX.md`](docs/INDEX.md) |
-| why something was built this way, and what broke | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
-| the three official modifications, with verified patches | [`docs/guide/README.md`](docs/guide/README.md) |
-| rehearsed live modifications, measured | [`docs/REHEARSAL.md`](docs/REHEARSAL.md) |
+| the full setup checklist, every script, every guest image | [`docs/RUNNING.md`](docs/RUNNING.md) |
+| why something was built this way | the design decisions **D1** to **D7** above |
 | the assignment itself | [`docs/PROJECT_en.md`](docs/PROJECT_en.md) |
+
+---
+
+## License
+
+The code in this repository is MIT-licensed; see [`LICENSE`](LICENSE).
+
+The assignment text is not mine to relicense. `docs/PROJECT_sr.md`,
+`docs/PROJECT_en.md` (my translation of it) and `docs/AOR2_2026_Projekat.pdf` are
+course material, reproduced here so the repository reads on its own and used under
+fair-dealing/fair-use for study and commentary. They remain the property of their
+authors at the School of Electrical Engineering, University of Belgrade.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Phase B verification: the three demos from docs/ROADMAP.md.
+# Phase B verification: the three demos from the phase B plan.
 #
 set -u
 
